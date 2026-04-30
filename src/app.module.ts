@@ -6,6 +6,7 @@ import { Config } from './config';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
 import { KafkaModule } from './kafka/kafka.module';
+import { TaxiModule } from './taxi/taxi.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { KafkaModule } from './kafka/kafka.module';
     RadioModule,
     RedisModule,
     KafkaModule,
+    TaxiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
