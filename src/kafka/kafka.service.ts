@@ -32,7 +32,9 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       clientId,
       brokers,
 
-      ssl: true,
+      ssl: {
+        rejectUnauthorized: false,
+      },
       logLevel: isProd ? logLevel.WARN : logLevel.INFO,
 
       connectionTimeout: 5000,
@@ -46,7 +48,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       },
 
       sasl: {
-        mechanism: 'plain',
+        mechanism: 'scram-sha-256',
         username,
         password,
       },
