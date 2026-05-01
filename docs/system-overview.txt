@@ -1,0 +1,248 @@
+═══════════════════════════════════════════════════════════════════════════════
+                        NESTJS RADIO — SYSTEM OVERVIEW
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT THE SYSTEM DOES:
+  Streams MP3 audio files continuously to Icecast (internet radio server).
+  Manages a playlist from a music database with auto-rotation every 6 hours.
+  Allows manual track injection into the live stream at any time.
+
+───────────────────────────────────────────────────────────────────────────────
+  LAYER 1 — WHO TALKS TO WHAT
+───────────────────────────────────────────────────────────────────────────────
+
+  [Browser / Mobile / curl]
+          |
+          | HTTP requests
+          v
+  [NestJS API :3000]
+          |
+          |-------- reads/writes ---------> [PostgreSQL]   (music library DB)
+          |-------- reads/writes ---------> [Redis]        (live playlist state)
+          |-------- enqueues jobs --------> [BullMQ Queue] (backed by Redis)
+          |-------- emits events ---------> [Kafka]        (event log)
+          |
+  [BullMQ Worker] <--- picks up jobs from queue
+          |
+          | pipes MP3 bytes
+          v
+  [Icecast :8000] <--- listeners connect here to hear the stream
+          |
+          v
+  [Listeners: VLC / Browser / Radio App]
+
+───────────────────────────────────────────────────────────────────────────────
+  LAYER 2 — WHAT EACH PIECE DOES
+───────────────────────────────────────────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PostgreSQL — "The Music Library"                                       │
+  │                                                                         │
+  │  Stores every track you own:                                            │
+  │    id | title | artist | filePath | genre | playCount | weight          │
+  │                                                                         │
+  │  WHY: Permanent source of truth. Survives restarts. Query by genre,     │
+  │       top played, weighted shuffle. The 6h cron pulls from here.        │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Redis — "The Live Playlist Brain"                                      │
+  │                                                                         │
+  │  Holds 5 keys:                                                          │
+  │                                                                         │
+  │  radio:playlist:active   [LIST]  track IDs currently playing            │
+  │  radio:playlist:staged   [LIST]  next playlist built by cron            │
+  │  radio:playlist:idx      [STR]   which track is playing right now       │
+  │  radio:playlist:meta     [HASH]  trackId -> {title, artist, filePath}   │
+  │  radio:playlist:swap_lock[STR]   prevents double-swap across replicas   │
+  │                                                                         │
+  │  WHY: Blazing fast reads (microseconds). The stream worker calls        │
+  │       getNextTrack() after every song — cannot afford a DB query here.  │
+  │       Also shared across all app replicas instantly.                    │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  BullMQ — "The Job Queue"                                               │
+  │                                                                         │
+  │  Queue: radio-stream                                                    │
+  │  Jobs:  { action: "start" }  /  { action: "stop" }                     │
+  │                                                                         │
+  │  WHY: You cannot run a long-lived audio stream inside an HTTP handler.  │
+  │       BullMQ offloads it to a background worker. Also gives you:        │
+  │         - Auto retry with exponential backoff if Icecast drops          │
+  │         - concurrency: 1 guarantee (only ONE stream at a time)          │
+  │         - Job history and failure tracking                              │
+  │                                                                         │
+  │  BullMQ IS built on Redis — it uses Redis internally for its queue.     │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Kafka — "The Event Log"                                                │
+  │                                                                         │
+  │  Topics:                                                                │
+  │    radio.events      -> STREAM_STARTED, STREAM_STOPPED,                │
+  │                         PLAYLIST_BUILT, TRACKS_ADDED_MANUALLY          │
+  │    radio.now_playing -> { trackId, title, artist } on every track      │
+  │                                                                         │
+  │  WHY: Decouples side-effects from core logic. Any service can           │
+  │       subscribe to know what is playing without touching the app.       │
+  │       Future uses: analytics dashboard, Discord bot now-playing,        │
+  │       listener count tracker, recommendation engine.                   │
+  │                                                                         │
+  │  Right now it is a foundation — the app works without consumers.        │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Icecast — "The Radio Transmitter"                                      │
+  │                                                                         │
+  │  Receives raw MP3 bytes from the NestJS worker via HTTP SOURCE method.  │
+  │  Broadcasts those bytes to any listener connected on :8000/live.mp3     │
+  │                                                                         │
+  │  WHY: NestJS cannot serve audio to 1000 listeners itself efficiently.   │
+  │       Icecast is purpose-built for multi-listener audio broadcasting.   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+───────────────────────────────────────────────────────────────────────────────
+  LAYER 3 — THE TWO PLAYLIST FLOWS
+───────────────────────────────────────────────────────────────────────────────
+
+  FLOW 1 — MANUAL ADD (instant, you control it)
+  -----------------------------------------------
+
+  POST /radio/playlist/add
+  { trackIds: ["uuid1", "uuid2"] }
+         |
+         v
+  RadioController
+         |
+         v
+  PlaylistBuilderService.addTracksToActive()
+         |
+         |-- findByIds() ---------> PostgreSQL
+         |                              |
+         |         track rows <---------+
+         |
+         |-- appendToActive() ----> Redis
+                                       |
+                              RPUSH radio:playlist:active uuid1 uuid2
+                              HSET  radio:playlist:meta   uuid1 {...}
+
+         Result: tracks are at the END of the active list.
+                 Stream worker hits them naturally as it loops.
+                 No restart. No interruption. Plays within current rotation.
+
+         |
+         v
+  Kafka: emit TRACKS_ADDED_MANUALLY
+
+
+  FLOW 2 — 6-HOUR CRON (automatic, replaces everything)
+  -------------------------------------------------------
+
+  Cron fires: 0 0,6,12,18 * * *  (midnight, 6am, noon, 6pm)
+         |
+         v
+  PlaylistCronService.sixHourRefresh()
+         |
+         v
+  PlaylistBuilderService.build({ strategy: WEIGHTED_SHUFFLE, swapImmediately: true })
+         |
+         |-- findWeightedShuffle() -> PostgreSQL
+         |                              |
+         |     all active tracks <------+  (higher weight = more slots in pool)
+         |     Fisher-Yates shuffle
+         |     deduplicate
+         |
+         |-- stagePlaylist() ------> Redis
+         |                              |
+         |                     DEL  radio:playlist:staged
+         |                     RPUSH radio:playlist:staged  [200 track IDs]
+         |                     HSET  radio:playlist:meta    [metadata]
+         |
+         |-- swapToStaged() -------> Redis
+                                        |
+                                SET swap_lock (30s TTL, NX — only 1 replica wins)
+                                RENAME radio:playlist:staged
+                                    --> radio:playlist:active   (atomic, O(1))
+                                SET radio:playlist:idx = 0      (reset to start)
+                                DEL swap_lock
+
+         Result: active list is now the fresh DB shuffle.
+                 Any manually added tracks from Flow 1 are gone.
+                 Stream worker picks up from track 0 on next song.
+
+         |
+         v
+  Kafka: emit PLAYLIST_BUILT
+
+───────────────────────────────────────────────────────────────────────────────
+  LAYER 4 — WHAT HAPPENS EVERY SONG
+───────────────────────────────────────────────────────────────────────────────
+
+  StreamWorker (background, always running)
+         |
+         v
+  getNextTrack()
+         |
+         |-- LRANGE radio:playlist:active 0 -1  -> [id1, id2, id3 ...]
+         |-- GET    radio:playlist:idx           -> 42
+         |-- HGET   radio:playlist:meta  id42   -> { filePath: "./audio/x.mp3" }
+         |-- SET    radio:playlist:idx   43
+         |
+         v
+  fs.createReadStream("./audio/x.mp3")
+         |
+         | .pipe()
+         v
+  http.request (SOURCE method) -> Icecast -> Listeners
+         |
+         | on 'end'
+         v
+  incrementPlayCount(id42) -> PostgreSQL  (fire and forget)
+         |
+         v
+  Kafka: emit radio.now_playing { trackId, title, artist }
+         |
+         v
+  getNextTrack()  <-- loops forever
+
+───────────────────────────────────────────────────────────────────────────────
+  LAYER 5 — TIMELINE EXAMPLE
+───────────────────────────────────────────────────────────────────────────────
+
+  00:00  Cron fires
+         -- PostgreSQL queried, 200 tracks shuffled by weight
+         -- Staged in Redis, swapped to active
+         -- Stream resets to track 0
+
+  00:15  DJ calls POST /radio/playlist/add { trackIds: [A, B] }
+         -- A and B appended to positions 201, 202 in active list
+         -- Stream continues playing from wherever it was (e.g. track 7)
+         -- A and B will play when the index reaches 201, 202
+
+  03:00  Stream has looped, now playing track A (position 201)
+         -- Listeners hear the manually added track
+
+  06:00  Cron fires again
+         -- Fresh DB shuffle, 200 tracks
+         -- Active list replaced atomically
+         -- A and B are gone (unless they are also in the DB as active tracks)
+         -- Stream resets to new track 0
+
+  06:00  Simultaneously on another replica
+         -- swap_lock (Redis NX) prevents that replica from also swapping
+         -- Only one swap happens
+
+═══════════════════════════════════════════════════════════════════════════════
+  SUMMARY TABLE
+═══════════════════════════════════════════════════════════════════════════════
+
+  Tool          Stores                    Why not use the other
+  ----------    -----------------------   --------------------------------
+  PostgreSQL    Permanent track library   Redis would lose data on restart
+  Redis         Live playlist + index     Postgres too slow per-song lookup
+  BullMQ        Stream job queue          Keeps stream off HTTP thread
+  Kafka         Event log                 Decouples analytics from streaming
+  Icecast       Audio broadcasting        NestJS can't serve 1000 listeners
+
+═══════════════════════════════════════════════════════════════════════════════
