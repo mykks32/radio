@@ -3,6 +3,7 @@ import { PlaylistService } from './playlist.service';
 import { BuildOptions, BuildStrategy, TrackMeta } from '../playlist.types';
 import { KafkaService } from '../../kafka/kafka.service';
 import { MusicRepository } from '../repositories/music.repository';
+import { KAFKA_EVENT, KAFKA_TOPIC } from '../../kafka/kafka.constant';
 
 @Injectable()
 export class PlaylistBuilderService {
@@ -68,8 +69,8 @@ export class PlaylistBuilderService {
       await this.playlistService.swapToStaged();
     }
 
-    await this.kafka.send('radio.events', {
-      event: 'PLAYLIST_BUILT',
+    await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
+      event: KAFKA_EVENT.PLAYLIST_BUILT,
       strategy,
       count: tracks.length,
       swappedImmediately: swapImmediately,
@@ -100,8 +101,8 @@ export class PlaylistBuilderService {
 
     await this.playlistService.appendToActive(meta);
 
-    await this.kafka.send('radio.events', {
-      event: 'TRACKS_ADDED_MANUALLY',
+    await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
+      event: KAFKA_EVENT.TRACKS_ADDED_MANUALLY,
       count: tracks.length,
       trackIds: tracks.map((t) => t.id),
       ts: Date.now(),

@@ -8,6 +8,7 @@ import { RedisModule } from './redis/redis.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { PlaylistModule } from './playlist/playlist.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     RedisModule,
     KafkaModule,
     PlaylistModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [AppService],
