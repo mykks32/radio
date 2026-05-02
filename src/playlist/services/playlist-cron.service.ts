@@ -1,28 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PlaylistBuilderService } from './playlist-builder.service';
-import { PlaylistService } from './playlist.service';
+// import { PlaylistService } from './playlist.service';
 import { BuildStrategy } from '../playlist.types';
 
-/**
- * PlaylistCronService
- *
- * Handles automated playlist lifecycle operations using scheduled jobs.
- *
- * Responsibilities:
- * - Periodically rebuild playlist from DB
- * - Replace active playlist with curated strategies
- * - Maintain freshness of radio stream content
- *
- * This service ensures the playlist remains dynamic without manual intervention.
- */
 @Injectable()
 export class PlaylistCronService {
   private readonly logger = new Logger(PlaylistCronService.name);
 
   constructor(
     private readonly builder: PlaylistBuilderService,
-    private readonly playlist: PlaylistService,
+    // private readonly playlist: PlaylistService,
   ) {}
 
   /**

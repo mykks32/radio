@@ -6,8 +6,8 @@ import { Config } from './config';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
 import { KafkaModule } from './kafka/kafka.module';
-import { TaxiModule } from './taxi/taxi.module';
 import { PlaylistModule } from './playlist/playlist.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -16,10 +16,10 @@ import { PlaylistModule } from './playlist/playlist.module';
       isGlobal: true,
       load: Config,
     }),
+    ScheduleModule.forRoot(),
     RadioModule,
     RedisModule,
     KafkaModule,
-    TaxiModule,
     PlaylistModule,
   ],
   controllers: [AppController],

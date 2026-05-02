@@ -38,6 +38,6 @@ const logger = new Logger('RedisModule');
     },
     RedisRepository,
   ],
-  exports: [PROVIDER.redis],
+  exports: [PROVIDER.redis, RedisRepository],
 })
 export class RedisModule {}
