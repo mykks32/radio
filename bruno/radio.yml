@@ -1,0 +1,185 @@
+opencollection: 1.0.0
+info:
+  name: radio
+config:
+  proxy:
+    inherit: true
+    config:
+      protocol: http
+      hostname: ''
+      port: ''
+      auth:
+        username: ''
+        password: ''
+      bypassProxy: ''
+  environments:
+    - name: radio_env
+      variables:
+        - name: radioUrl
+          value: http://localhost:3000
+items:
+  - info:
+      name: playlist
+      type: folder
+      seq: 1
+    request:
+      auth: inherit
+    items:
+      - info:
+          name: Get Playlist
+          type: http
+          seq: 1
+        http:
+          method: GET
+          url: '{{radioUrl}}/playlist'
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: add track to Playlist
+          type: http
+          seq: 3
+        http:
+          method: POST
+          url: '{{radioUrl}}/playlist/tracks'
+          body:
+            type: json
+            data: |-
+              {
+              "trackIds": ["1", "2"]
+              }
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: Get next track Metadata
+          type: http
+          seq: 4
+        http:
+          method: GET
+          url: '{{radioUrl}}/playlist/next'
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: delete track from playlist
+          type: http
+          seq: 5
+        http:
+          method: DELETE
+          url: '{{radioUrl}}/playlist/next'
+          body:
+            type: json
+            data: |-
+              {
+                "trackIds": [
+                  "1",
+                  "2"
+                ]
+              }
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: swap status of track
+          type: http
+          seq: 6
+        http:
+          method: POST
+          url: '{{radioUrl}}/playlist/swap'
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: clear active playlist
+          type: http
+          seq: 7
+        http:
+          method: DELETE
+          url: '{{radioUrl}}/playlist'
+          body:
+            type: json
+            data: |-
+              {
+                "trackIds": [
+                  "1",
+                  "2"
+                ]
+              }
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: Build Playlist
+          type: http
+          seq: 2
+        http:
+          method: POST
+          url: '{{radioUrl}}/playlist/build'
+          body:
+            type: json
+            data: |-
+              {
+                "strategy": "weighted_shuffle"
+              }
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: Start Radio
+          type: http
+          seq: 1
+        http:
+          method: POST
+          url: '{{radioUrl}}/radio/start'
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+      - info:
+          name: Stop Radio
+          type: http
+          seq: 1
+        http:
+          method: POST
+          url: '{{radioUrl}}/radio/stop'
+          auth: inherit
+        settings:
+          encodeUrl: true
+          timeout: 0
+          followRedirects: true
+          maxRedirects: 5
+  - info:
+      name: radio
+      type: folder
+      seq: 2
+    request:
+      auth: inherit
+bundled: true
+extensions:
+  bruno:
+    exportedAt: '2026-05-02T14:43:07.398Z'
+    exportedUsing: Bruno
