@@ -43,7 +43,9 @@ export class RadioProcessor extends WorkerHost {
       ts: Date.now(),
     });
 
-    // Stream the file — resolves when the track finishes playing
+    // Stream the file — resolves when the track finishes playing naturally
+    // OR when it is intentionally stopped/skipped (stopCurrent → SIGTERM →
+    // ffmpeg exits with a signal, which RadioStreamService resolves cleanly).
     await this.streamService.streamTrack(track);
 
     await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
@@ -57,7 +59,16 @@ export class RadioProcessor extends WorkerHost {
 
   @OnWorkerEvent('completed')
   async onCompleted(job: Job) {
-    if (job.name === PLAY_NEXT_JOB && this.radioService.status === 'playing') {
+    // Only auto-advance when the radio is still running AND the job completed
+    // naturally (i.e. not because of a skip). A skip calls radioService.skip()
+    // which enqueues the next track itself before killing the process, so
+    // streamTrack resolves cleanly and this job still reaches 'completed'.
+    // Guard: if a next job is already waiting in the queue, don't double-enqueue.
+    if (job.name !== PLAY_NEXT_JOB) return;
+    if (this.radioService.status !== 'playing') return;
+
+    const waiting = await this.radioService.queueSize();
+    if (waiting === 0) {
       await this.radioService.enqueueNext();
     }
   }

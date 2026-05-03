@@ -7,7 +7,6 @@ import { PlaylistModule } from '../playlist/playlist.module';
 import { RadioService } from './services/radio.service';
 import { RadioProcessor } from './processors/radio.processor';
 import { RadioStreamService } from './services/radio-stream.service';
-import { RadioGateway } from './radio.gateway';
 
 @Module({
   imports: [
@@ -18,7 +17,7 @@ import { RadioGateway } from './radio.gateway';
     PlaylistModule,
   ],
   controllers: [RadioController],
-  providers: [RadioService, RadioStreamService, RadioProcessor, RadioGateway],
+  providers: [RadioService, RadioStreamService, RadioProcessor],
   exports: [RadioService],
 })
 export class RadioModule {}

@@ -48,8 +48,23 @@ export class RadioService implements OnModuleInit {
   }
 
   async skip(): Promise<void> {
+    if (!this.isRunning) {
+      this.logger.warn('Cannot skip — radio is not running');
+      return;
+    }
+
+    // Kill the active ffmpeg process. This causes the current BullMQ job to
+    // fail (ffmpeg exits with a non-zero/signal code), which triggers
+    // onFailed — NOT onCompleted — so we must enqueue the next track here
+    // directly rather than relying on the onCompleted hook.
     this.streamService.stopCurrent();
+    await this.enqueueNext();
     this.logger.log('⏭ Skipped to next track');
+  }
+
+  /** Returns the number of jobs currently waiting in the queue. */
+  async queueSize(): Promise<number> {
+    return this.queue.count();
   }
 
   // Public so RadioProcessor can call it from @OnWorkerEvent('completed')
