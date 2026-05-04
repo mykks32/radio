@@ -5,20 +5,20 @@ import { TrackMeta } from '../playlist.types';
 const TRACKS: TrackMeta[] = [
   {
     id: '1',
-    title: 'Song 1',
-    artist: 'Artist first',
+    title: 'Gairi Khet',
+    artist: 'Asha Bhogle',
     filePath: '/Users/srikriydv/Desktop/radio/audio/song.mp3',
   },
   {
     id: '2',
-    title: 'Song 2',
-    artist: 'Artist Second',
+    title: 'Siri ma Siri',
+    artist: 'Milan Amatya',
     filePath: '/Users/srikriydv/Desktop/radio/audio/song2.mp3',
   },
   {
     id: '3',
-    title: 'Song 3',
-    artist: 'Artist Third',
+    title: 'Bahut Jatate ho',
+    artist: 'Alka Yagnik',
     filePath: '/Users/srikriydv/Desktop/radio/audio/song3.mp3',
   },
 ];

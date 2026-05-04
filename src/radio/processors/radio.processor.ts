@@ -1,36 +1,44 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { QUEUE } from '../../queue/queue.constant';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue, Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { Job } from 'bullmq';
+
+import { QUEUE } from '../../queue/queue.constant';
 import { PlaylistService } from '../../playlist/services/playlist.service';
 import { KafkaService } from '../../kafka/kafka.service';
 import { KAFKA_EVENT, KAFKA_TOPIC } from '../../kafka/kafka.constant';
-import { RadioService } from '../services/radio.service';
 import { RadioStreamService } from '../services/radio-stream.service';
 
 export const PLAY_NEXT_JOB = 'play-next';
 
-@Processor(QUEUE.RADIO_QUEUE)
+@Processor(QUEUE.RADIO_QUEUE, {
+  // lockDuration: how long the lock lasts
+  lockDuration: 5 * 60 * 1000, // 5 minutes
+  // lockRenewTime: how often it renews (must be less than lockDuration)
+  lockRenewTime: 2 * 60 * 1000, // renew every 2 minutes
+})
 export class RadioProcessor extends WorkerHost {
   private readonly logger = new Logger(RadioProcessor.name);
 
   constructor(
     private readonly playlistService: PlaylistService,
     private readonly kafka: KafkaService,
-    private readonly radioService: RadioService,
     private readonly streamService: RadioStreamService,
+
+    @InjectQueue(QUEUE.RADIO_QUEUE)
+    private readonly queue: Queue,
   ) {
     super();
   }
 
-  async process(job: Job): Promise<void> {
-    if (job.name !== PLAY_NEXT_JOB) return;
+  async process(job: Job): Promise<{ played: boolean }> {
+    if (job.name !== PLAY_NEXT_JOB) return { played: false };
 
     const track = await this.playlistService.getNext();
 
     if (!track) {
       this.logger.warn('No track returned from playlist — queue is empty');
-      return;
+      return { played: false };
     }
 
     this.logger.log(`▶ Now playing: "${track.title}" by ${track.artist}`);
@@ -43,9 +51,6 @@ export class RadioProcessor extends WorkerHost {
       ts: Date.now(),
     });
 
-    // Stream the file — resolves when the track finishes playing naturally
-    // OR when it is intentionally stopped/skipped (stopCurrent → SIGTERM →
-    // ffmpeg exits with a signal, which RadioStreamService resolves cleanly).
     await this.streamService.streamTrack(track);
 
     await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
@@ -55,21 +60,34 @@ export class RadioProcessor extends WorkerHost {
     });
 
     this.logger.log(`✓ Finished: "${track.title}"`);
+    // signals onCompleted to enqueue next track
+    return { played: true };
   }
 
   @OnWorkerEvent('completed')
   async onCompleted(job: Job) {
-    // Only auto-advance when the radio is still running AND the job completed
-    // naturally (i.e. not because of a skip). A skip calls radioService.skip()
-    // which enqueues the next track itself before killing the process, so
-    // streamTrack resolves cleanly and this job still reaches 'completed'.
-    // Guard: if a next job is already waiting in the queue, don't double-enqueue.
     if (job.name !== PLAY_NEXT_JOB) return;
-    if (this.radioService.status !== 'playing') return;
 
-    const waiting = await this.radioService.queueSize();
+    // Stop if the last job found nothing to play
+    if (!job.returnvalue?.played) {
+      this.logger.warn('No track in playlist — will not re-enqueue');
+      return;
+    }
+
+    const waiting = await this.queue.count();
+
     if (waiting === 0) {
-      await this.radioService.enqueueNext();
+      await this.queue.add(
+        PLAY_NEXT_JOB,
+        {},
+        {
+          attempts: 3,
+          backoff: { type: 'fixed', delay: 2000 },
+          delay: 100,
+        },
+      );
+
+      this.logger.log('▶ Enqueued next track');
     }
   }
 

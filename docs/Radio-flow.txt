@@ -1,0 +1,301 @@
+## Main Radio Playback Flow
+
+```
+[HTTP API: POST /radio/start]
+           │
+           ▼
+    [RadioService.start()]
+           │
+           ▼
+    [RadioService.enqueueNext()]
+           │
+           ▼
+    [BullMQ Queue] ───────────────┐
+           │                      │
+           │ (job added)          │
+           ▼                      │
+    [RadioProcessor] ◄────────────┘
+           │
+           ▼
+    [PlaylistService.getNext()]
+           │
+           ├───► [Redis: Get active playlist IDs]
+           ├───► [Redis: Get current index]
+           ├───► [Redis: Get track metadata]
+           │
+           ▼
+    [TrackMeta { id, title, artist, filePath }]
+           │
+           ▼
+    [RadioStreamService.streamTrack(track)]
+           │
+           ├───► Spawn ffmpeg process
+           ├───► Read audio file at real-time rate (-re)
+           ├───► Encode to MP3 (128kbps)
+           ├───► Stream to Icecast server
+           │
+           ▼
+    [Kafka: Send TRACK_STARTED event]
+           │
+           ▼
+    [Await ffmpeg completion]
+           │
+           ├───► Normal finish ─────┐
+           ├───► Killed (skip/stop) │
+           │                        │
+           ▼                        │
+    [Kafka: Send TRACK_ENDED event] │
+           │                        │
+           ▼                        │
+    [BullMQ: Job completed]         │
+           │                        │
+           ▼                        │
+    [RadioProcessor.onCompleted()]  │
+           │                        │
+           ├───► if played success ─┘
+           │         │
+           │         ▼
+           │    [enqueueNext()] ───► (loop back to top)
+           │
+           └───► if no track ──► stop
+```
+
+## Playlist Building Flow
+
+```
+[Trigger Sources]
+           │
+    ┌──────┼──────┬────────────────────┐
+    │      │      │                    │
+    ▼      ▼      ▼                    ▼
+[Cron:   [Cron:  [HTTP API:         [HTTP API:
+ 6-Hour]  Weekly] POST /build]       POST /tracks]
+    │      │      │                    │
+    └──────┼──────┘                    │
+           │                           │
+           ▼                           ▼
+    [PlaylistBuilderService.build()]   │
+           │                           │
+           ├───► Determine strategy    │
+           │    (WEIGHTED_SHUFFLE,     │
+           │     TOP_PLAYED, GENRE,    │
+           │     FULL_LIBRARY)         │
+           │                           │
+           ▼                           │
+    [MusicRepository] ◄────────────────┘
+           │
+           ├───► findWeightedShuffle()
+           ├───► findTopPlayed()
+           ├───► findByGenre()
+           └───► findByIds()
+           │
+           ▼
+    [TrackMeta[] array (max 2 per current code)]
+           │
+           ▼
+    [PlaylistService.stagePlaylist(tracks)]
+           │
+           ├───► Store in Redis: playlist:staged
+           ├───► Store metadata: playlist:staged:meta
+           │
+           ▼
+    [Check swapImmediately flag]
+           │
+           ├───► true ──► [PlaylistService.swapToStaged()]
+           │                   │
+           │                   ├───► Move staged → active
+           │                   ├───► Reset index to 0
+           │                   └───► Delete staged playlist
+           │
+           └───► false ──► Wait for manual swap
+           │
+           ▼
+    [Kafka: Send PLAYLIST_BUILT event]
+```
+
+## Redis Data Structure Flow
+
+```
+┌──────────────────────────────────────────────────────┐
+│                     REDIS                            │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ACTIVE PLAYLIST (List)                              │
+│  ┌────────────────────────────────────┐              │
+│  │ playlist:active = ["1", "2", "3"]  │              │
+│  └────────────────────────────────────┘              │
+│           │                                          │
+│           ▼                                          │
+│  TRACK METADATA (Hash)                               │
+│  ┌────────────────────────────────────┐              │
+│  │ playlist:meta = {                  │              │
+│  │   "1": '{"id":"1","title":"..."}', │              │
+│  │   "2": '{"id":"2","title":"..."}', │              │
+│  │   "3": '{"id":"3","title":"..."}'  │              │
+│  │ }                                  │              │
+│  └────────────────────────────────────┘              │
+│           │                                          │
+│           ▼                                          │
+│  CURRENT INDEX (String)                              │
+│  ┌────────────────────────────────────┐              │
+│  │ playlist:idx = "1"                 │              │
+│  │ (points to currently playing)      │              │
+│  └────────────────────────────────────┘              │
+│                                                      │
+│  STAGED PLAYLIST (for future swap)                   │
+│  ┌────────────────────────────────────┐              │
+│  │ playlist:staged = ["4", "5"]       │              │
+│  │ playlist:staged:meta = {...}       │              │
+│  └────────────────────────────────────┘              │
+└──────────────────────────────────────────────────────┘
+```
+
+## Complete Request-Response Flow (Example: Skip Song)
+
+```
+[Client] ──POST /radio/skip──► [HTTP Server:3000]
+                                      │
+                                      ▼
+                              [RadioController]
+                                      │
+                                      ▼
+                              [RadioService.skip()]
+                                      │
+                                      ├───► Check if radio running
+                                      │
+                                      ▼
+                              [RadioStreamService.stopCurrent()]
+                                      │
+                                      ├───► Kill ffmpeg process (SIGTERM)
+                                      ├───► Set stoppedIntentionally = true
+                                      ├───► Clear currentTrack reference
+                                      │
+                                      ▼
+                              [RadioService.enqueueNext()]
+                                      │
+                                      ▼
+                              [BullMQ: Add play-next job]
+                                      │
+                                      ▼
+                              [Response: { status: "skipped" }]
+                                      │
+                                      └───► [Client receives 200 OK]
+
+                              [Meanwhile, background worker...]
+                                      │
+                                      ▼
+                              [RadioProcessor.process()]
+                                      │
+                                      ├───► Get next track from playlist
+                                      ├───► Start streaming new track
+                                      └───► Send TRACK_STARTED event
+```
+
+## Auto-Refresh Cron Schedule
+
+```
+Timeline (every 6 hours)
+─────────────────────────────────────────────────────────►
+│           │           │           │           │
+00:00      06:00      12:00      18:00      00:00 (next day)
+ │           │           │           │
+ ▼           ▼           ▼           ▼
+[6-Hour Refresh - Strategy: WEIGHTED_SHUFFLE, swapImmediately: true]
+ │           │           │           │
+ └───────────┴───────────┴───────────┘
+           (runs 4 times per day)
+
+Weekly Schedule
+─────────────────────────────────────────────────────────►
+Monday     Tuesday    Wednesday  Thursday   Friday
+08:00
+ │
+ ▼
+[Weekly Refresh - Strategy: TOP_PLAYED, limit: 100, swapImmediately: true]
+```
+
+## ⚡ Event Flow (Kafka)
+
+```
+[System Events] ──► [Kafka Service] ──► [Kafka Topic: radio.events]
+                           │
+                           ├───► PLAYLIST_BUILT
+                           │     { strategy, count, swappedImmediately }
+                           │
+                           ├───► TRACKS_ADDED_MANUALLY
+                           │     { count, trackIds }
+                           │
+                           ├───► TRACK_STARTED
+                           │     { trackId, title, artist }
+                           │
+                           └───► TRACK_ENDED
+                                 { trackId, duration? }
+                                           │
+                                           ▼
+                                    [External Consumers]
+                                    (Analytics, Logging,
+                                     Monitoring, etc.)
+```
+
+## Error Handling Flow
+
+```
+[Any Process]
+      │
+      ▼
+[Error Occurs]
+      │
+      ├───► ffmpeg error ──► [RadioStreamService]
+      │                           │
+      │                           ├───► Log error
+      │                           ├───► Reject promise
+      │                           └───► BullMQ retry (3 attempts)
+      │
+      ├───► Redis error ──► [PlaylistService]
+      │                           │
+      │                           ├───► Log warning
+      │                           └───► Return empty/default
+      │
+      ├───► Kafka error ──► [KafkaService]
+      │                           │
+      │                           ├───► Log error
+      │                           ├───► Retry connection (8 retries)
+      │                           └───► Continue operation (non-blocking)
+      │
+      └───► Cron error ──► [PlaylistCronService]
+                              │
+                              ├───► Log error (doesn't crash app)
+                              └───► Skip this cycle, wait for next
+```
+
+## Module Dependencies
+
+```
+                    ┌─────────────────┐
+                    │   AppModule     │
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+            ▼                ▼                ▼
+    ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+    │ RadioModule │  │PlaylistModule│ │ RedisModule │
+    └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+           │                │                │
+           │         ┌──────┼──────┐         │
+           │         │      │      │         │
+           ▼         ▼      ▼      ▼         ▼
+    ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+    │ QueueModule │  │ KafkaModule │  │(Global)     │
+    └─────────────┘  └─────────────┘  └─────────────┘
+           │                │                │
+           └────────────────┴────────────────┘
+                      │
+                      ▼
+            ┌─────────────────┐
+            │ ConfigModule    │
+            │ (.env + configs)│
+            └─────────────────┘
+```
+
+This architecture shows a well-designed but **not production-ready** system due to the 2-track hardcoded limit. The flow is logically sound but needs that limit fixed to work as a real radio station.
