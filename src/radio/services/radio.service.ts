@@ -17,7 +17,9 @@ export class RadioService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.queue.obliterate({ force: true }).catch(() => null);
+    // drain() only removes waiting + delayed jobs — never touches an
+    // already-dequeued active job, so no "Missing key" race condition.
+    await this.queue.drain(true);
     this.logger.log('Radio queue cleaned on startup');
   }
 
@@ -34,17 +36,17 @@ export class RadioService implements OnModuleInit {
       this.logger.warn('Radio already running');
       return;
     }
-
     this.isRunning = true;
+    this.streamService.startHlsPackager();
     await this.enqueueNext();
-    this.logger.log('📻 Radio started');
+    this.logger.log('Radio started');
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
-    this.streamService.stopCurrent();
-    await this.queue.drain();
-    this.logger.log('📻 Radio stopped');
+    this.streamService.stopAll();
+    await this.queue.drain(true);
+    this.logger.log('Radio stopped');
   }
 
   async skip(): Promise<void> {
@@ -52,29 +54,23 @@ export class RadioService implements OnModuleInit {
       this.logger.warn('Cannot skip — radio is not running');
       return;
     }
-
-    // Kill the active ffmpeg process. This causes the current BullMQ job to
-    // fail (ffmpeg exits with a non-zero/signal code), which triggers
-    // onFailed — NOT onCompleted — so we must enqueue the next track here
-    // directly rather than relying on the onCompleted hook.
-    this.streamService.stopCurrent();
+    await this.streamService.skip();
     await this.enqueueNext();
-    this.logger.log('⏭ Skipped to next track');
+    this.logger.log('Skipped to next track');
   }
 
-  /** Returns the number of jobs currently waiting in the queue. */
   async queueSize(): Promise<number> {
     return this.queue.count();
   }
 
-  // Public so RadioProcessor can call it from @OnWorkerEvent('completed')
   async enqueueNext(): Promise<void> {
     const jobOptions: JobsOptions = {
       attempts: 3,
       backoff: { type: 'fixed', delay: 2000 },
       delay: 100,
+      removeOnComplete: true, // delete key immediately — prevents "Missing key" on restart
+      removeOnFail: 10, // keep last 10 failures for debugging
     };
-
     await this.queue.add(PLAY_NEXT_JOB, {}, jobOptions);
   }
 }

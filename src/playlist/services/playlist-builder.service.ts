@@ -61,6 +61,7 @@ export class PlaylistBuilderService {
       title: t.title,
       artist: t.artist,
       filePath: t.filePath,
+      durationSeconds: t.durationSeconds,
     }));
 
     await this.playlistService.stagePlaylist(meta);
@@ -97,6 +98,7 @@ export class PlaylistBuilderService {
       title: t.title,
       artist: t.artist,
       filePath: t.filePath,
+      durationSeconds: t.durationSeconds,
     }));
 
     await this.playlistService.appendToActive(meta);

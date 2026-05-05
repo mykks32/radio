@@ -7,19 +7,25 @@ const TRACKS: TrackMeta[] = [
     id: '1',
     title: 'Gairi Khet',
     artist: 'Asha Bhogle',
-    filePath: '/Users/srikriydv/Desktop/radio/audio/song.mp3',
+    filePath: '/Users/rock/Desktop/radio/music/song.mp3',
+    // filePath: '/Users/srikriydv/Desktop/radio/audio/song.mp3',
+    durationSeconds: 275,
   },
   {
     id: '2',
     title: 'Siri ma Siri',
     artist: 'Milan Amatya',
-    filePath: '/Users/srikriydv/Desktop/radio/audio/song2.mp3',
+    filePath: '/Users/rock/Desktop/radio/music/song2.mp3',
+    // filePath: '/Users/srikriydv/Desktop/radio/audio/song2.mp3',
+    durationSeconds: 303,
   },
   {
     id: '3',
     title: 'Bahut Jatate ho',
     artist: 'Alka Yagnik',
-    filePath: '/Users/srikriydv/Desktop/radio/audio/song3.mp3',
+    filePath: '/Users/rock/Desktop/radio/music/song3.mp3',
+    // filePath: '/Users/srikriydv/Desktop/radio/audio/song3.mp3',
+    durationSeconds: 442,
   },
 ];
 

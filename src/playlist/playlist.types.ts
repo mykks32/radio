@@ -3,6 +3,7 @@ export interface TrackMeta {
   title: string;
   artist: string;
   filePath: string;
+  durationSeconds: number;
 }
 
 export enum BuildStrategy {

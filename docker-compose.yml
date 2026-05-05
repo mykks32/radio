@@ -1,0 +1,22 @@
+services:
+  icecast:
+    image: libretime/icecast:latest
+    container_name: icecast
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./icecast.xml:/etc/icecast2/icecast.xml:ro
+    restart: always
+
+  liquidsoap:
+    image: savonet/liquidsoap:v2.3.1
+    container_name: liquidsoap
+    depends_on:
+      - icecast
+    ports:
+      - "1234:1234"
+    volumes:
+      - ./radio.liq:/radio.liq:ro
+      - ./music:/music
+    command: liquidsoap /radio.liq
+    restart: unless-stopped

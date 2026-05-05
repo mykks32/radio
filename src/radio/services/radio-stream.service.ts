@@ -1,185 +1,257 @@
 import {
   Injectable,
   Logger,
-  OnModuleDestroy,
   OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
-import EventEmitter from 'node:events';
-import { TrackMeta } from '../../playlist/playlist.types';
-import { ChildProcess, spawn } from 'node:child_process';
 import { ConfigService } from '@nestjs/config';
-import * as path from 'node:path';
+import { ChildProcess, spawn } from 'node:child_process';
+import * as net from 'node:net';
 import * as fs from 'node:fs';
+import { TrackMeta } from '../../playlist/playlist.types';
 
 @Injectable()
-export class RadioStreamService
-  extends EventEmitter
-  implements OnModuleInit, OnModuleDestroy
-{
+export class RadioStreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RadioStreamService.name);
-  private currentTrack: TrackMeta | null = null;
-  private activeProcess: ChildProcess | null = null;
-  private stoppedIntentionally = false;
 
-  // Icecast connection config
+  private hlsProcess: ChildProcess | null = null;
+  private isRunning = false;
+  private currentTrack: TrackMeta | null = null;
+
   private readonly icecastHost: string;
   private readonly icecastPort: number;
   private readonly icecastMount: string;
   private readonly icecastUser: string;
   private readonly icecastPass: string;
 
-  constructor(private readonly configService: ConfigService) {
-    super();
+  private readonly liquidsoapHost: string;
+  private readonly liquidsoapPort: number;
 
-    this.icecastHost = this.configService.get<string>(
-      'icecast.host',
+  private readonly hlsOutputDir: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.icecastHost = this.configService.get('icecast.host', 'localhost');
+    this.icecastPort = this.configService.get('icecast.port', 8000);
+    this.icecastMount = this.configService.get('icecast.mount', '/live.mp3');
+    this.icecastUser = this.configService.get('icecast.user', 'source');
+    this.icecastPass = this.configService.get('icecast.pass', 'hackme');
+
+    this.liquidsoapHost = this.configService.get(
+      'liquidsoap.host',
       '127.0.0.1',
     );
-    this.icecastPort = this.configService.get<number>('icecast.port', 8000);
-    this.icecastMount = this.configService.get<string>(
-      'icecast.mount',
-      '/live.mp3',
-    );
-    this.icecastUser = this.configService.get<string>('icecast.user', 'source');
-    this.icecastPass = this.configService.get<string>('icecast.pass', 'hackme');
+    this.liquidsoapPort = this.configService.get('liquidsoap.port', 1234);
+
+    this.hlsOutputDir = this.configService.get('hls.outputDir', '/tmp/hls');
   }
 
   onModuleInit() {
+    fs.mkdirSync(this.hlsOutputDir, { recursive: true });
     this.logger.log('RadioStreamService initialized');
   }
 
   onModuleDestroy() {
-    this.stopCurrent();
+    this.stopAll();
   }
 
   get nowPlaying(): TrackMeta | null {
     return this.currentTrack;
   }
 
-  stopCurrent(): void {
-    if (this.activeProcess) {
-      this.stoppedIntentionally = true;
-      this.activeProcess.kill('SIGTERM');
-      this.activeProcess = null;
-    }
+  // ─── Liquidsoap telnet ────────────────────────────────────────────────────
+  private sendLiquidsoapCommand(command: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const client = net.createConnection(
+        { host: this.liquidsoapHost, port: this.liquidsoapPort },
+        () => {
+          client.write(command + '\n');
+        },
+      );
 
-    this.currentTrack = null;
+      let response = '';
+      client.on('data', (data) => {
+        response += data.toString();
+        if (response.includes('END')) {
+          client.end();
+        }
+      });
+
+      client.on('end', () =>
+        resolve(response.replace(/END\r?\n?$/, '').trim()),
+      );
+      client.on('error', reject);
+
+      client.setTimeout(3000, () => {
+        client.destroy();
+        reject(new Error('Liquidsoap command timed out'));
+      });
+    });
   }
 
-  /**
-   * Streams a track to Icecast via ffmpeg.
-   * ffmpeg reads the file at real-time rate (-re) and pushes to Icecast
-   * using the icecast:// protocol output.
-   * Resolves when the track finishes or is stopped intentionally.
-   */
-  streamTrack(track: TrackMeta): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.stopCurrent();
+  async setNextTrack(track: TrackMeta): Promise<void> {
+    this.currentTrack = track;
+    try {
+      await this.sendLiquidsoapCommand(`request.push ${track.filePath}`);
+      this.logger.log(`Liquidsoap queued: "${track.title}"`);
+    } catch (err) {
+      this.logger.error(`Liquidsoap setNextTrack failed: ${String(err)}`);
+    }
+  }
 
-      this.stoppedIntentionally = false;
+  async skip(): Promise<void> {
+    this.currentTrack = null;
+    try {
+      await this.sendLiquidsoapCommand('skip');
+      this.logger.log('Liquidsoap: skipped track');
+    } catch (err) {
+      this.logger.error(`Liquidsoap skip failed: ${String(err)}`);
+    }
+  }
 
-      setTimeout(() => {
-        const filePath = path.resolve(track.filePath);
+  async reloadPlaylist(): Promise<void> {
+    try {
+      await this.sendLiquidsoapCommand('playlist.reload');
+      this.logger.log('Liquidsoap: playlist reloaded');
+    } catch (err) {
+      this.logger.error(`Liquidsoap reload failed: ${String(err)}`);
+    }
+  }
 
-        this.logger.log(`Resolved file path: ${filePath}`);
+  // Returns how many seconds remain in the current track.
+  // Requires server.register in radio.liq exposing "track.remaining".
+  async getRemaining(): Promise<number> {
+    try {
+      const res = await this.sendLiquidsoapCommand('track.remaining');
+      const seconds = parseFloat(res);
+      this.logger.debug(`Liquidsoap remaining: ${seconds}s`);
+      return isNaN(seconds) || seconds < 0 ? 30 : seconds;
+    } catch {
+      this.logger.warn('getRemaining failed — defaulting to 30s');
+      return 30;
+    }
+  }
 
-        if (!fs.existsSync(filePath)) {
-          this.logger.error(`File not found: ${filePath}`);
-          return reject(new Error(`File not found: ${filePath}`));
+  // ─── Icecast readiness ────────────────────────────────────────────────────
+  private async waitForIcecast(retries = 20, intervalMs = 3000): Promise<void> {
+    const url = `http://${this.icecastHost}:${this.icecastPort}${this.icecastMount}`;
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        // We only care that Icecast is accepting connections, not that the
+        // mount is live yet — a 404 still means Icecast is up.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+
+        // 200 = stream live, 404 = mount not yet registered (Liquidsoap
+        // may still be starting), anything else = Icecast is at least up.
+        if (res.status !== 0) {
+          this.logger.log(`Icecast ready (HTTP ${res.status})`);
+          return;
         }
+      } catch {
+        // connection refused or aborted — not ready
+      }
 
-        this.currentTrack = track;
+      this.logger.log(`Waiting for Icecast at ${url}... (${i + 1}/${retries})`);
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
 
-        // Build Icecast output URL for ffmpeg
-        // icecast://<user>:<password>@<host>:<port><mount>
-        const icecastUrl = [
-          `icecast://${this.icecastUser}:${this.icecastPass}`,
-          `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`,
-        ].join('');
+    throw new Error(`Icecast never became ready at ${url}`);
+  }
 
-        // ffmpeg args:
-        // -re              → read input at native frame rate (real-time)
-        // -i <file>        → input file
-        // -vn              → drop video if any (cover art etc)
-        // -acodec libmp3lame → re-encode to MP3 (or copy if already MP3)
-        // -ab 128k         → bitrate
-        // -f mp3           → output format
-        // ice_*            → Icecast metadata headers
-        const ffmpegArgs = [
-          '-re',
-          '-i',
-          filePath,
-          '-vn',
-          '-acodec',
-          'libmp3lame',
-          '-ab',
-          '128k',
-          '-ar',
-          '44100',
-          '-f',
-          'mp3',
-          '-ice_name',
-          track.title,
-          '-ice_description',
-          track.artist,
-          '-content_type',
-          'audio/mpeg',
-          icecastUrl,
-        ];
+  // ─── HLS packager ────────────────────────────────────────────────────────
+  startHlsPackager(): void {
+    if (this.hlsProcess) return;
+    this.isRunning = true;
 
-        this.logger.log(
-          `▶ Piping to Icecast: "${track.title}" by ${track.artist}`,
-        );
+    this.waitForIcecast()
+      .then(() => this.spawnFfmpeg())
+      .catch((err) =>
+        this.logger.error(`HLS packager aborted: ${err.message}`),
+      );
+  }
 
-        const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
+  private spawnFfmpeg(): void {
+    if (!this.isRunning) return; // stopAll() was called while waiting
 
-        this.activeProcess = ffmpeg;
+    const sourceUrl =
+      `http://${this.icecastUser}:${this.icecastPass}` +
+      `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`;
 
-        ffmpeg.stderr.on('data', (data: Buffer) => {
-          // ffmpeg logs progress to stderr — only surface actual errors
-          const msg = data.toString();
-          if (msg.includes('Error') || msg.includes('error')) {
-            this.logger.error(`ffmpeg: ${msg.trim()}`);
-          }
-        });
+    const segmentPath = `${this.hlsOutputDir}/segment_%05d.ts`;
+    const playlistPath = `${this.hlsOutputDir}/stream.m3u8`;
 
-        ffmpeg.on(
-          'close',
-          (code: number | null, signal: NodeJS.Signals | null) => {
-            this.activeProcess = null;
-            this.currentTrack = null;
+    const args = [
+      '-re',
+      '-i',
+      sourceUrl,
 
-            // signal !== null  → Linux: kernel reports SIGTERM directly
-            // code === 255     → macOS: ffmpeg maps SIGTERM to exit code 255
-            // stoppedIntentionally → belt-and-suspenders flag set in stopCurrent()
-            //
-            // Previously only (1) was checked, so macOS skip/stop always
-            // fell into the error branch and threw "exited with code 255".
-            const killedIntentionally =
-              signal !== null || code === 255 || this.stoppedIntentionally;
+      // Transcode to AAC 128k
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-ac',
+      '2',
+      '-ar',
+      '44100',
 
-            if (code === 0 || killedIntentionally) {
-              this.logger.log(`✓ Finished streaming: "${track.title}"`);
-              resolve();
-            } else {
-              const err = new Error(
-                `ffmpeg exited unexpectedly with code ${code}`,
-              );
-              this.logger.error(err.message);
-              reject(err);
-            }
-          },
-        );
+      // HLS muxer
+      '-f',
+      'hls',
+      '-hls_time',
+      '6',
+      '-hls_list_size',
+      '10',
+      '-hls_flags',
+      'delete_segments+append_list',
+      '-hls_segment_type',
+      'mpegts',
+      '-hls_segment_filename',
+      segmentPath,
+      playlistPath,
+    ];
 
-        ffmpeg.on('error', (err) => {
-          this.activeProcess = null;
-          this.currentTrack = null;
-          this.logger.error(`ffmpeg spawn error: ${err.message}`);
-          reject(err);
-        });
-      }, 1000);
+    this.hlsProcess = spawn('ffmpeg', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+
+    this.hlsProcess.stderr?.on('data', (buf: Buffer) => {
+      const msg = buf.toString();
+      // ffmpeg writes normal progress to stderr; only surface real errors
+      if (msg.includes('Error') || msg.includes('error')) {
+        this.logger.error(`[hls-packager] ${msg.trim()}`);
+      }
+    });
+
+    this.hlsProcess.on('close', (code) => {
+      this.hlsProcess = null;
+      this.logger.warn(`[hls-packager] exited with code ${code}`);
+      if (this.isRunning) {
+        this.logger.log('[hls-packager] restarting in 3s...');
+        setTimeout(() => this.spawnFfmpeg(), 3000);
+      }
+    });
+
+    this.hlsProcess.on('error', (err) => {
+      this.logger.error(`[hls-packager] spawn error: ${err.message}`);
+      if (err.message.includes('ENOENT')) {
+        this.logger.error('ffmpeg not found — install it: brew install ffmpeg');
+        this.isRunning = false; // don't retry if binary is missing
+      }
+    });
+
+    this.logger.log(`HLS packager started → ${playlistPath}`);
+  }
+
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  stopAll(): void {
+    this.isRunning = false;
+    this.hlsProcess?.kill('SIGTERM');
+    this.hlsProcess = null;
+    this.currentTrack = null;
   }
 }

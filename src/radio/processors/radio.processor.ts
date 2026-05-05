@@ -41,7 +41,12 @@ export class RadioProcessor extends WorkerHost {
       return { played: false };
     }
 
-    this.logger.log(`▶ Now playing: "${track.title}" by ${track.artist}`);
+    this.logger.log(`▶ Queuing: "${track.title}" by ${track.artist}`);
+
+    // CHANGED: replaced streamTrack() (which no longer exists) with
+    // setNextTrack(). Liquidsoap owns playback; we just tell it what's next.
+    // The job completes immediately — we no longer block for track duration.
+    await this.streamService.setNextTrack(track);
 
     await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
       event: KAFKA_EVENT.TRACK_STARTED,
@@ -51,46 +56,34 @@ export class RadioProcessor extends WorkerHost {
       ts: Date.now(),
     });
 
-    await this.streamService.streamTrack(track);
-
-    await this.kafka.send(KAFKA_TOPIC.RADIO_EVENTS, {
-      event: KAFKA_EVENT.TRACK_ENDED,
-      trackId: track.id,
-      ts: Date.now(),
-    });
-
-    this.logger.log(`✓ Finished: "${track.title}"`);
-    // signals onCompleted to enqueue next track
+    this.logger.log(`✓ Handed off to Liquidsoap: "${track.title}"`);
     return { played: true };
   }
 
   @OnWorkerEvent('completed')
   async onCompleted(job: Job) {
     if (job.name !== PLAY_NEXT_JOB) return;
-
-    // Stop if the last job found nothing to play
-    if (!job.returnvalue?.played) {
-      this.logger.warn('No track in playlist — will not re-enqueue');
-      return;
-    }
+    if (!job.returnvalue?.played) return;
 
     const waiting = await this.queue.count();
+    if (waiting > 0) return;
 
-    if (waiting === 0) {
-      await this.queue.add(
-        PLAY_NEXT_JOB,
-        {},
-        {
-          attempts: 3,
-          backoff: { type: 'fixed', delay: 2000 },
-          delay: 100,
-        },
-      );
+    const remainingSeconds = await this.streamService.getRemaining();
+    // Never schedule sooner than 5s from now — protects against bad values
+    const delayMs = Math.max((remainingSeconds - 2) * 1000, 5_000);
 
-      this.logger.log('▶ Enqueued next track');
-    }
+    await this.queue.add(
+      PLAY_NEXT_JOB,
+      {},
+      {
+        attempts: 3,
+        backoff: { type: 'fixed', delay: 2000 },
+        delay: delayMs,
+      },
+    );
+
+    this.logger.log(`▶ Next track enqueued in ${Math.round(delayMs / 1000)}s`);
   }
-
   @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error) {
     this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
