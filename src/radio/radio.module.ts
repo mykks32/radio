@@ -10,6 +10,7 @@ import { RadioStreamService } from './services/radio-stream.service';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
+import { RadioGateway } from './gateways/radio.gateway';
 
 @Module({
   imports: [
@@ -31,7 +32,7 @@ import { ExpressAdapter } from '@bull-board/express';
     PlaylistModule,
   ],
   controllers: [RadioController],
-  providers: [RadioService, RadioStreamService, RadioProcessor],
+  providers: [RadioService, RadioStreamService, RadioProcessor, RadioGateway],
   exports: [RadioService],
 })
 export class RadioModule {}

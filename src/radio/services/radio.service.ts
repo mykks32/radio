@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue, JobsOptions } from 'bullmq';
-import { PLAY_NEXT_JOB } from '../processors/radio.processor';
-import { RadioStreamService } from './radio-stream.service';
-import { TrackMeta } from '../../playlist/playlist.types';
+import { Queue } from 'bullmq';
 import { QUEUE } from '../../queue/queue.constant';
+import { RadioStreamService } from './radio-stream.service';
+import { PLAY_NEXT_JOB } from '../processors/radio.processor';
+import { PlaylistService } from '../../playlist/services/playlist.service';
 
 @Injectable()
 export class RadioService implements OnModuleInit {
@@ -14,67 +14,67 @@ export class RadioService implements OnModuleInit {
   constructor(
     @InjectQueue(QUEUE.RADIO_QUEUE) private readonly queue: Queue,
     private readonly streamService: RadioStreamService,
+    private readonly playlistService: PlaylistService,
   ) {}
 
   async onModuleInit() {
     await this.queue.obliterate({ force: true }).catch(() => null);
-    this.logger.log('Radio queue cleaned on startup');
+
+    // event-driven scheduling
+    this.streamService.on('track-ended', async () => {
+      await this.enqueueNext();
+    });
   }
 
-  get nowPlaying(): TrackMeta | null {
-    return this.streamService.nowPlaying;
-  }
-
-  get status(): 'playing' | 'stopped' {
+  get status() {
     return this.isRunning ? 'playing' : 'stopped';
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) {
-      this.logger.warn('Radio already running');
-      return;
-    }
+  get nowPlaying() {
+    return this.streamService.nowPlaying ?? null;
+  }
+
+  async start() {
+    if (this.isRunning) return;
 
     this.isRunning = true;
     await this.enqueueNext();
-    this.logger.log('📻 Radio started');
+
+    this.logger.log('Radio started');
   }
 
-  async stop(): Promise<void> {
+  async stop() {
     this.isRunning = false;
     this.streamService.stopCurrent();
     await this.queue.drain();
-    this.logger.log('📻 Radio stopped');
+
+    this.logger.log('Radio stopped');
   }
 
-  async skip(): Promise<void> {
-    if (!this.isRunning) {
-      this.logger.warn('Cannot skip — radio is not running');
+  async skip() {
+    if (!this.isRunning) return;
+
+    this.streamService.stopCurrent();
+  }
+
+  async enqueueNext() {
+    if (!this.isRunning) return;
+
+    const track = await this.playlistService.getNext();
+
+    if (!track) {
+      this.logger.warn('Playlist empty');
       return;
     }
 
-    // Kill the active ffmpeg process. This causes the current BullMQ job to
-    // fail (ffmpeg exits with a non-zero/signal code), which triggers
-    // onFailed — NOT onCompleted — so we must enqueue the next track here
-    // directly rather than relying on the onCompleted hook.
-    this.streamService.stopCurrent();
-    await this.enqueueNext();
-    this.logger.log('⏭ Skipped to next track');
-  }
-
-  /** Returns the number of jobs currently waiting in the queue. */
-  async queueSize(): Promise<number> {
-    return this.queue.count();
-  }
-
-  // Public so RadioProcessor can call it from @OnWorkerEvent('completed')
-  async enqueueNext(): Promise<void> {
-    const jobOptions: JobsOptions = {
-      attempts: 3,
-      backoff: { type: 'fixed', delay: 2000 },
-      delay: 100,
-    };
-
-    await this.queue.add(PLAY_NEXT_JOB, {}, jobOptions);
+    await this.queue.add(
+      PLAY_NEXT_JOB,
+      { track },
+      {
+        attempts: 3,
+        backoff: { type: 'fixed', delay: 2000 },
+        delay: 0,
+      },
+    );
   }
 }

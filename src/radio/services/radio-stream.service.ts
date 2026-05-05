@@ -4,12 +4,12 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import EventEmitter from 'node:events';
-import { TrackMeta } from '../../playlist/playlist.types';
-import { ChildProcess, spawn } from 'node:child_process';
 import { ConfigService } from '@nestjs/config';
-import * as path from 'node:path';
+import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { EventEmitter } from 'node:events';
+import { TrackMeta } from '../../playlist/playlist.types';
 
 @Injectable()
 export class RadioStreamService
@@ -17,169 +17,92 @@ export class RadioStreamService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(RadioStreamService.name);
+
   private currentTrack: TrackMeta | null = null;
   private activeProcess: ChildProcess | null = null;
-  private stoppedIntentionally = false;
 
-  // Icecast connection config
   private readonly icecastHost: string;
   private readonly icecastPort: number;
   private readonly icecastMount: string;
   private readonly icecastUser: string;
   private readonly icecastPass: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(private readonly config: ConfigService) {
     super();
 
-    this.icecastHost = this.configService.get<string>(
-      'icecast.host',
-      '127.0.0.1',
-    );
-    this.icecastPort = this.configService.get<number>('icecast.port', 8000);
-    this.icecastMount = this.configService.get<string>(
-      'icecast.mount',
-      '/live.mp3',
-    );
-    this.icecastUser = this.configService.get<string>('icecast.user', 'source');
-    this.icecastPass = this.configService.get<string>('icecast.pass', 'hackme');
+    this.icecastHost = this.config.get('icecast.host', '127.0.0.1');
+    this.icecastPort = this.config.get('icecast.port', 8000);
+    this.icecastMount = this.config.get('icecast.mount', '/live.mp3');
+    this.icecastUser = this.config.get('icecast.user', 'source');
+    this.icecastPass = this.config.get('icecast.pass', 'hackme');
   }
 
   onModuleInit() {
-    this.logger.log('RadioStreamService initialized');
+    this.logger.log('Stream service ready');
   }
 
   onModuleDestroy() {
     this.stopCurrent();
   }
 
-  get nowPlaying(): TrackMeta | null {
+  get nowPlaying() {
     return this.currentTrack;
   }
 
-  stopCurrent(): void {
+  stopCurrent() {
     if (this.activeProcess) {
-      this.stoppedIntentionally = true;
       this.activeProcess.kill('SIGTERM');
       this.activeProcess = null;
     }
-
     this.currentTrack = null;
   }
 
-  /**
-   * Streams a track to Icecast via ffmpeg.
-   * ffmpeg reads the file at real-time rate (-re) and pushes to Icecast
-   * using the icecast:// protocol output.
-   * Resolves when the track finishes or is stopped intentionally.
-   */
-  streamTrack(track: TrackMeta): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.stopCurrent();
+  streamTrack(track: TrackMeta): void {
+    this.stopCurrent();
 
-      this.stoppedIntentionally = false;
+    const filePath = path.resolve(track.filePath);
 
-      setTimeout(() => {
-        const filePath = path.resolve(track.filePath);
+    if (!fs.existsSync(filePath)) {
+      this.logger.error(`File not found: ${filePath}`);
+      return;
+    }
 
-        this.logger.log(`Resolved file path: ${filePath}`);
+    this.currentTrack = track;
 
-        if (!fs.existsSync(filePath)) {
-          this.logger.error(`File not found: ${filePath}`);
-          return reject(new Error(`File not found: ${filePath}`));
-        }
+    const icecastUrl =
+      `icecast://${this.icecastUser}:${this.icecastPass}` +
+      `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`;
 
-        this.currentTrack = track;
+    const ffmpeg = spawn('ffmpeg', [
+      '-re',
+      '-i',
+      filePath,
+      '-vn',
+      '-acodec',
+      'libmp3lame',
+      '-ab',
+      '128k',
+      '-ar',
+      '44100',
+      '-f',
+      'mp3',
+      icecastUrl,
+    ]);
 
-        // Build Icecast output URL for ffmpeg
-        // icecast://<user>:<password>@<host>:<port><mount>
-        const icecastUrl = [
-          `icecast://${this.icecastUser}:${this.icecastPass}`,
-          `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`,
-        ].join('');
+    this.activeProcess = ffmpeg;
 
-        // ffmpeg args:
-        // -re              → read input at native frame rate (real-time)
-        // -i <file>        → input file
-        // -vn              → drop video if any (cover art etc)
-        // -acodec libmp3lame → re-encode to MP3 (or copy if already MP3)
-        // -ab 128k         → bitrate
-        // -f mp3           → output format
-        // ice_*            → Icecast metadata headers
-        const ffmpegArgs = [
-          '-re',
-          '-i',
-          filePath,
-          '-vn',
-          '-acodec',
-          'libmp3lame',
-          '-ab',
-          '128k',
-          '-ar',
-          '44100',
-          '-f',
-          'mp3',
-          '-ice_name',
-          track.title,
-          '-ice_description',
-          track.artist,
-          '-content_type',
-          'audio/mpeg',
-          icecastUrl,
-        ];
+    this.logger.log(`▶ Streaming: ${track.title}`);
 
-        this.logger.log(
-          `▶ Piping to Icecast: "${track.title}" by ${track.artist}`,
-        );
+    ffmpeg.on('close', () => {
+      this.logger.log(`✓ Finished: ${track.title}`);
+      this.currentTrack = null;
+      this.activeProcess = null;
+      // Emit Event
+      this.emit('track-ended', track);
+    });
 
-        const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-
-        this.activeProcess = ffmpeg;
-
-        ffmpeg.stderr.on('data', (data: Buffer) => {
-          // ffmpeg logs progress to stderr — only surface actual errors
-          const msg = data.toString();
-          if (msg.includes('Error') || msg.includes('error')) {
-            this.logger.error(`ffmpeg: ${msg.trim()}`);
-          }
-        });
-
-        ffmpeg.on(
-          'close',
-          (code: number | null, signal: NodeJS.Signals | null) => {
-            this.activeProcess = null;
-            this.currentTrack = null;
-
-            // signal !== null  → Linux: kernel reports SIGTERM directly
-            // code === 255     → macOS: ffmpeg maps SIGTERM to exit code 255
-            // stoppedIntentionally → belt-and-suspenders flag set in stopCurrent()
-            //
-            // Previously only (1) was checked, so macOS skip/stop always
-            // fell into the error branch and threw "exited with code 255".
-            const killedIntentionally =
-              signal !== null || code === 255 || this.stoppedIntentionally;
-
-            if (code === 0 || killedIntentionally) {
-              this.logger.log(`✓ Finished streaming: "${track.title}"`);
-              resolve();
-            } else {
-              const err = new Error(
-                `ffmpeg exited unexpectedly with code ${code}`,
-              );
-              this.logger.error(err.message);
-              reject(err);
-            }
-          },
-        );
-
-        ffmpeg.on('error', (err) => {
-          this.activeProcess = null;
-          this.currentTrack = null;
-          this.logger.error(`ffmpeg spawn error: ${err.message}`);
-          reject(err);
-        });
-      }, 1000);
+    ffmpeg.on('error', (err) => {
+      this.logger.error(`FFmpeg error: ${err.message}`);
     });
   }
 }
