@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Radio Stream</title>
+</head>
+<body>
+<h2>📻 Live Radio</h2>
+
+<p id="status">Connecting...</p>
+<p id="nowPlaying">Nothing playing</p>
+
+<audio id="player" controls autoplay></audio>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<script>
+  const WS_URL = "http://localhost:3000"; // your backend
+  const STREAM_URL = "http://localhost:8000/song.mp3";
+  const socket = io(WS_URL, {
+    transports: ["websocket"],
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+  });
+
+  const player = document.getElementById("player");
+  const status = document.getElementById("status");
+  const nowPlaying = document.getElementById("nowPlaying");
+
+  // 🔊 load stream
+  function loadStream() {
+    player.src = STREAM_URL + "?t=" + Date.now(); // prevent caching
+    player.play().catch(() => {});
+  }
+
+  // ===== SOCKET EVENTS =====
+
+  socket.on("connect", () => {
+    status.innerText = "🟢 Connected";
+    loadStream();
+  });
+
+  socket.on("disconnect", () => {
+    status.innerText = "🔴 Disconnected";
+  });
+
+  socket.on("track_start", (data) => {
+    console.log("track_start", data);
+
+    nowPlaying.innerText = "Now Playing: " + data.title;
+
+    // reload stream (important for sync)
+    loadStream();
+  });
+
+  socket.on("track_ended", () => {
+    console.log("track_ended");
+
+    // try reconnect quickly
+    setTimeout(() => {
+      loadStream();
+    }, 500);
+  });
+
+  // optional: handle audio errors
+  player.addEventListener("error", () => {
+    console.log("Audio error, retrying...");
+    setTimeout(loadStream, 1000);
+  });
+</script>
+</body>
+</html>

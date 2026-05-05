@@ -1,6 +1,6 @@
 import { type RedisClientType } from 'redis';
 import { Inject, Injectable } from '@nestjs/common';
-import { PROVIDER } from '../common/constant';
+import { PROVIDER } from '../common/constants/provider.constant';
 
 /**
  * RedisRepository

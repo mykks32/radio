@@ -5,6 +5,9 @@ import { QUEUE } from '../../queue/queue.constant';
 import { RadioStreamService } from './radio-stream.service';
 import { PLAY_NEXT_JOB } from '../processors/radio.processor';
 import { PlaylistService } from '../../playlist/services/playlist.service';
+import { RadioGateway } from '../gateways/radio.gateway';
+import { TrackMeta } from '../../playlist/playlist.types';
+import { WS_EVENTS } from '../../common/constants/provider.constant';
 
 @Injectable()
 export class RadioService implements OnModuleInit {
@@ -15,13 +18,19 @@ export class RadioService implements OnModuleInit {
     @InjectQueue(QUEUE.RADIO_QUEUE) private readonly queue: Queue,
     private readonly streamService: RadioStreamService,
     private readonly playlistService: PlaylistService,
+    private readonly gateway: RadioGateway,
   ) {}
 
   async onModuleInit() {
     await this.queue.obliterate({ force: true }).catch(() => null);
 
+    this.streamService.on(WS_EVENTS.TRACK_START, (track: TrackMeta) => {
+      this.gateway.emitTrackStart(track);
+    });
+
     // event-driven scheduling
-    this.streamService.on('track-ended', async () => {
+    this.streamService.on(WS_EVENTS.TRACK_ENDED, async (track: TrackMeta) => {
+      this.gateway.emitTrackEnded(track);
       await this.enqueueNext();
     });
   }

@@ -8,6 +8,12 @@ const logger = new Logger('Bootstrap');
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    credentials: true,
+  });
+
   app.useWebSocketAdapter(new IoAdapter(app));
 
   const port = Number(process.env.PORT) || 3000;

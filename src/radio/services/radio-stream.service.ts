@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { TrackMeta } from '../../playlist/playlist.types';
+import { WS_EVENTS } from '../../common/constants/provider.constant';
 
 @Injectable()
 export class RadioStreamService
@@ -93,12 +94,15 @@ export class RadioStreamService
 
     this.logger.log(`▶ Streaming: ${track.title}`);
 
+    // START EVENT
+    this.emit(WS_EVENTS.TRACK_START, track);
+
     ffmpeg.on('close', () => {
       this.logger.log(`✓ Finished: ${track.title}`);
       this.currentTrack = null;
       this.activeProcess = null;
-      // Emit Event
-      this.emit('track-ended', track);
+      // END EVENT
+      this.emit(WS_EVENTS.TRACK_ENDED, track);
     });
 
     ffmpeg.on('error', (err) => {
