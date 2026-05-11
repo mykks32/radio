@@ -1,0 +1,160 @@
+# Defines the API version for ConfigMap resources
+apiVersion: v1
+# Specifies this is a ConfigMap resource
+kind: ConfigMap
+
+# Metadata for identifying the ConfigMap
+metadata:
+    # Name of the ConfigMap
+    name: icecast-config
+    # Namespace where this ConfigMap belongs
+    namespace: friendslikeus-prod
+
+# The actual configuration data
+data:
+    # Icecast configuration filename
+    icecast.xml: |
+      <!-- Root Icecast configuration -->
+      <icecast>
+          
+          <!-- Server location -->
+          <location>Earth</location>
+          
+          <!-- Administrator contact email -->
+          <admin>admin@friendslikeus.com</admin>
+          
+          <!-- Server limits and performance tuning -->
+          <limits>
+              
+              <!-- Maximum number of connected listeners -->
+              <clients>1000</clients>
+              
+              <!-- Maximum number of streaming sources -->
+              <sources>20</sources>
+              
+              <!-- Number of worker threads -->
+              <threadpool>8</threadpool>
+              
+              <!-- Queue buffer size in bytes -->
+              <queue-size>1048576</queue-size>
+              
+              <!-- Listener connection timeout -->
+              <client-timeout>30</client-timeout>
+              
+              <!-- HTTP header timeout -->
+              <header-timeout>15</header-timeout>
+              
+              <!-- Source timeout -->
+              <source-timeout>10</source-timeout>
+              
+              <!-- Enable burst for faster stream startup -->
+              <burst-on-connect>1</burst-on-connect>
+              
+              <!-- Burst size in bytes -->
+              <burst-size>65536</burst-size>
+          
+          </limits>
+          
+          <!-- Authentication configuration -->
+          <authentication>
+              
+              <!-- Password used by source clients -->
+              <source-password>${SOURCE_PASSWORD}</source-password>
+              
+              <!-- Password used by relay servers -->
+              <relay-password>${RELAY_PASSWORD}</relay-password>
+              
+              <!-- Icecast admin username -->
+              <admin-user>admin</admin-user>
+              
+              <!-- Icecast admin password -->
+              <admin-password>${ADMIN_PASSWORD}</admin-password>
+          
+          </authentication>
+          
+          <!-- Public hostname -->
+          <hostname>radio.friendslikeus.com</hostname>
+          
+          <!-- Icecast listening socket -->
+          <listen-socket>
+              <port>8000</port>
+          </listen-socket>
+          
+          <!-- CORS headers -->
+          <http-headers>
+              <header name="Access-Control-Allow-Origin" value="*" />
+              <header name="Access-Control-Allow-Headers" value="Origin, Accept, X-Requested-With" />
+              <header name="Access-Control-Allow-Methods" value="GET, OPTIONS" />
+          </http-headers>
+          
+          <!-- Stream mount configuration -->
+          <mount type="normal">
+              
+              <!-- Stream endpoint -->
+              <mount-name>/song.mp3</mount-name>
+              
+              <!-- Maximum listeners for this mount -->
+              <max-listeners>1000</max-listeners>
+              
+              <!-- Mount burst size -->
+              <burst-size>65536</burst-size>
+              
+              <!-- Stream title -->
+              <stream-name>FriendsLikeUs Radio</stream-name>
+              
+              <!-- Stream description -->
+              <stream-description>FriendsLikeUs Live Radio</stream-description>
+              
+              <!-- Website URL -->
+              <stream-url>https://friendslikeus.com</stream-url>
+              
+              <!-- Hide from public Icecast directories -->
+              <public>0</public>
+          
+          </mount>
+          
+          <!-- Enable serving static files -->
+          <fileserve>1</fileserve>
+          
+          <!-- Icecast directories -->
+          <paths>
+              
+              <!-- Base directory -->
+              <basedir>/usr/share/icecast2</basedir>
+              
+              <!-- Log directory -->
+              <logdir>/var/log/icecast2</logdir>
+              
+              <!-- Web UI directory -->
+              <webroot>/usr/share/icecast2/web</webroot>
+              
+              <!-- Admin UI directory -->
+              <adminroot>/usr/share/icecast2/admin</adminroot>
+          
+          </paths>
+          
+          <!-- Logging configuration -->
+          <logging>
+              
+              <!-- Access log -->
+              <accesslog>access.log</accesslog>
+              
+              <!-- Error log -->
+              <errorlog>error.log</errorlog>
+              
+              <!-- Log level -->
+              <loglevel>2</loglevel>
+              
+              <!-- Archive rotated logs -->
+              <logarchive>1</logarchive>
+          
+          </logging>
+          
+          <!-- Security configuration -->
+          <security>
+              
+              <!-- Disable chroot -->
+              <chroot>0</chroot>
+          
+          </security>
+      </icecast>

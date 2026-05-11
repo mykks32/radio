@@ -1,0 +1,45 @@
+# Defines the API version for Ingress resources
+apiVersion: networking.k8s.io/v1
+# Specifies this is an Ingress resource
+kind: Ingress
+# Metadata for identifying the Ingress
+metadata:
+  # Name of the Ingress
+  name: icecast
+  # Namespace where this Ingress belongs
+  namespace: friendslikeus-prod
+  # Annotations for nginx controller configuration
+  annotations:
+    # Disables response buffering for streaming
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # Disables request buffering for streaming
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    # Increases read timeout for long-lived connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    # Increases send timeout for long-lived connections
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+# Specification for the Ingress rules
+spec:
+  # Name of the Ingress controller to use
+  ingressClassName: nginx
+
+  # Routing rules for incoming traffic
+  rules:
+    # Domain name this Ingress responds to
+    - host: radio.friendslikeus.com
+      # HTTP path routing configuration
+      http:
+        paths:
+          # Match all paths
+          - path: /
+            # Path matching behavior
+            pathType: Prefix
+            # Backend service for matched requests
+            backend:
+              service:
+                # Name of the target service
+                name: icecast
+                port:
+                  # Service port number
+                  number: 8000

@@ -1,0 +1,131 @@
+# Defines the API version for the Deployment resource
+apiVersion: apps/v1
+# Specifies the kind of Kubernetes resource (Deployment)
+kind: Deployment
+# Metadata section for identifying the Deployment
+metadata:
+  # Name of the Deployment
+  name: icecast
+  # Kubernetes namespace where this resource will be created
+  namespace: friendslikeus-prod
+  # Labels for organizing and selecting resources
+  labels:
+    app: icecast
+
+# Specification for the Deployment's desired state
+spec:
+  # Number of pod replicas to run
+  replicas: 2
+
+  # Label selector to identify which pods belong to this Deployment
+  selector:
+    matchLabels:
+      app: icecast
+
+  # Update strategy for replacing old pods with new ones
+  strategy:
+    type: RollingUpdate
+
+  # Pod template defining how each pod should be created
+  template:
+    metadata:
+      # Labels applied to pods created from this template
+      labels:
+        app: icecast
+
+    spec:
+      # Time Kubernetes waits before killing a pod after termination signal
+      terminationGracePeriodSeconds: 60
+
+      initContainers:
+        - name: config-init
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - apk add --no-cache gettext && envsubst < /template/icecast.xml > /config/icecast.xml
+          env:
+            - name: SOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: icecast-secrets
+                  key: source-password
+            - name: RELAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: icecast-secrets
+                  key: relay-password
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: icecast-secrets
+                  key: admin-password
+          volumeMounts:
+            - name: icecast-config-template
+              mountPath: /template
+            - name: icecast-config-live
+              mountPath: /config
+
+      # List of containers in the pod
+      containers:
+        # Name of the container
+        - name: icecast
+          # Container image to use
+          image: moul/icecast:latest
+          # Policy for pulling the image
+          imagePullPolicy: IfNotPresent
+
+          # Ports exposed by the container
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # Volume mounts for the container
+          volumeMounts:
+            # Mount ConfigMap as configuration file
+            - name: icecast-config-live
+              mountPath: /etc/icecast2/icecast.xml
+              subPath: icecast.xml
+            # Mount volume for log storage
+            - name: logs
+              mountPath: /var/log/icecast2
+
+          # Resource requests and limits for scheduling
+          resources:
+            # Minimum guaranteed resources
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            # Maximum allowed resources
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # Readiness probe to check if pod is ready to serve traffic
+          readinessProbe:
+            httpGet:
+              path: /status.xsl
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          # Liveness probe to check if pod is healthy
+          livenessProbe:
+            httpGet:
+              path: /status.xsl
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+
+      # Volumes available to the pod
+      volumes:
+        # ConfigMap volume for Icecast configuration
+        - name: icecast-config-template
+          configMap:
+            name: icecast-config
+        # rendered config written by init container
+        - name: icecast-config-live
+          emptyDir: { }
+        # EmptyDir volume for temporary log storage
+        - name: logs
+          emptyDir: { }

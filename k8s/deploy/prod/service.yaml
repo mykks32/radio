@@ -1,0 +1,35 @@
+# Defines the API version for Service resources
+apiVersion: v1
+# Specifies this is a Service resource
+kind: Service
+# Metadata for identifying the Service
+metadata:
+  # Name of the Service
+  name: icecast
+  # Namespace where this Service belongs
+  namespace: friendslikeus-prod
+  # Labels for organizing and selecting
+  labels:
+    app: icecast
+
+# Specification for the Service's behavior
+spec:
+  # Service type (ClusterIP is internal only)
+  type: NodePort
+
+  # Label selector to find which pods to route traffic to
+  selector:
+    app: icecast
+
+  # Ports exposed by this Service
+  ports:
+    # Name of the port configuration
+    - name: http
+      # Protocol for the port
+      protocol: TCP
+      # Port exposed by the Service
+      port: 8000
+      # Port on the container to forward to
+      targetPort: 8000
+      # Static port on each node to expose externally (must be in range 30000-32767)
+      nodePort: 30900

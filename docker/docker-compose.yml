@@ -52,6 +52,11 @@ services:
       - zookeeper_log:/var/lib/zookeeper/log
     restart: unless-stopped
 
+
+  #  docker run -d \
+  #  -p 8080:8080 \
+  #  -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=35.237.71.136:9092 \
+  #  provectuslabs/kafka-ui
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka

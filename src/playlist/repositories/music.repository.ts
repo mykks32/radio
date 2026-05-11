@@ -3,13 +3,13 @@ import { TrackMeta } from '../playlist.types';
 
 // Static track library
 const TRACKS: TrackMeta[] = [
-  // {
-  //   id: '1',
-  //   title: 'Gairi Khet',
-  //   artist: 'Asha Bhogle',
-  //   filePath: '/Users/rock/Desktop/radio/audio/song.mp3',
-  // },
   {
+    id: '1',
+    title: 'Gairi Khet',
+    artist: 'Asha Bhogle',
+    filePath: '/Users/rock/Desktop/radio/audio/song.mp3',
+  },
+  { 
     id: '2',
     title: 'Siri ma Siri',
     artist: 'Milan Amatya',

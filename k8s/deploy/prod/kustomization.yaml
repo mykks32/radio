@@ -1,0 +1,20 @@
+# Defines the Kustomize API version
+apiVersion: kustomize.config.k8s.io/v1beta1
+# Specifies this is a Kustomization resource
+kind: Kustomization
+
+# Default namespace for all resources
+namespace: friendslikeus-prod
+
+# List of resource files to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+secretGenerator:
+  - name: icecast-secrets
+    envs:
+      - secret.env
