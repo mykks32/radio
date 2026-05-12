@@ -1,0 +1,22 @@
+# Target namespace for all resources
+namespace: radio
+
+# Base resources to include
+resources:
+  - ../../base
+
+# Secret generation from env file
+secretGenerator:
+  - name: radio-secret
+    envs:
+      - radio-secret.env
+
+  # Secrets for the Icecast init container
+  - name: icecast-secret
+    envs:
+      - icecast-secret.env
+
+# Secret generator options
+generatorOptions:
+  # Prevents adding random hash to secret name
+  disableNameSuffixHash: true

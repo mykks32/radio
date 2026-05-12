@@ -9,7 +9,7 @@ import { KafkaModule } from './kafka/kafka.module';
 import { PlaylistModule } from './playlist/playlist.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QueueModule } from './queue/queue.module';
-import { LoggerMiddleware } from './common/middleware/logger.middleware';
+// import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 
 @Module({
@@ -31,5 +31,6 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestIdMiddleware, LoggerMiddleware).forRoutes('*');  }
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
 }

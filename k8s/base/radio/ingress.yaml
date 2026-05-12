@@ -1,0 +1,39 @@
+# Kubernetes API version for Ingress
+apiVersion: networking.k8s.io/v1
+
+# Resource type
+kind: Ingress
+
+# Ingress metadata
+metadata:
+  # Ingress name
+  name: radio
+  # Namespace
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: radio
+
+  # NGINX-specific settings
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+# Ingress specification
+spec:
+  # Ingress controller type
+  ingressClassName: nginx
+
+  # Routing rules
+  rules:
+    - host: radio.app.com  # Domain name
+
+      http:
+        paths:
+          - path: /            # Root path
+            pathType: Prefix   # Match all subpaths
+
+            backend:
+              service:
+                name: radio  # Target service
+                port:
+                  number: 80     # Service port

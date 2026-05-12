@@ -7,7 +7,7 @@ metadata:
   # Name of the Deployment
   name: icecast
   # Kubernetes namespace where this resource will be created
-  namespace: friendslikeus-prod
+  namespace: radio
   # Labels for organizing and selecting resources
   labels:
     app: icecast
@@ -15,7 +15,7 @@ metadata:
 # Specification for the Deployment's desired state
 spec:
   # Number of pod replicas to run
-  replicas: 2
+  replicas: 1
 
   # Label selector to identify which pods belong to this Deployment
   selector:
@@ -48,17 +48,17 @@ spec:
             - name: SOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: icecast-secrets
+                  name: icecast-secret
                   key: source-password
             - name: RELAY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: icecast-secrets
+                  name: icecast-secret
                   key: relay-password
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: icecast-secrets
+                  name: icecast-secret
                   key: admin-password
           volumeMounts:
             - name: icecast-config-template

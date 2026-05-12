@@ -1,0 +1,293 @@
+{
+  "info": {
+    "_postman_id": "af426050-30fe-48e3-9885-cfac210b5deb",
+    "name": "radio",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "48228544",
+    "_collection_link": "https://go.postman.co/collection/48228544-af426050-30fe-48e3-9885-cfac210b5deb?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "playlist",
+      "item": [
+        {
+          "name": "Get Playlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/playlist",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "add track to Playlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackIds\": [\n    \"1\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{radioUrl}}/playlist/tracks",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist",
+                "tracks"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Build Playlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"weighted_shuffle\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{radioUrl}}/playlist/build",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist",
+                "build"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get next track Metadata",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/playlist/next",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist",
+                "next"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "delete track from playlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackIds\": [\n    \"1\",\n    \"2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{radioUrl}}/playlist/next",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist",
+                "next"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "swap status of track",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/playlist/swap",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist",
+                "swap"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "clear active playlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackIds\": [\n    \"1\",\n    \"2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{radioUrl}}/playlist",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "playlist"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "radio",
+      "item": [
+        {
+          "name": "Radio Start",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/radio/start",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "radio",
+                "start"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Radio Stop",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/radio/stop",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "radio",
+                "stop"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Radio Skip",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/radio/skip",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "radio",
+                "skip"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Radio status",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{radioUrl}}/radio/status",
+              "host": [
+                "{{radioUrl}}"
+              ],
+              "path": [
+                "radio",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "radioUrl",
+      "value": "http://radio.app.com",
+      "type": "default"
+    }
+  ]
+}

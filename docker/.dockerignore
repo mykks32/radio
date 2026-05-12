@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Documentation
+README.md
+docs
+
+# Kubernetes configs
+k8s
+
+# API collections
+postman
+
+# Tests
+test
+
+# Temporary files
+tmp

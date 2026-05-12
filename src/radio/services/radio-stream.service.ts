@@ -19,12 +19,19 @@ export class RadioStreamService
 {
   private readonly logger = new Logger(RadioStreamService.name);
 
-  private readonly pipePath = '/Users/rock/Desktop/radio/tmp/radio_pipe';
+  // PIPE + FFMPEG
+  private readonly pipePath: string;
+  private readonly ffmpegPath: string;
+  // AUDIO
+  private readonly audioBitrate: string;
+  private readonly sampleRate: number;
+
   private pipeStream: fs.WriteStream | null = null;
 
   private currentTrack: TrackMeta | null = null;
   private activeProcess: ChildProcess | null = null;
 
+  // ICECAST
   private readonly icecastHost: string;
   private readonly icecastPort: number;
   private readonly icecastMount: string;
@@ -34,6 +41,18 @@ export class RadioStreamService
   constructor(private readonly config: ConfigService) {
     super();
 
+    // PIPE + FFMPEG
+    this.pipePath = this.config.get<string>(
+      'radio.pipePath',
+      '/tmp/radio_pipe',
+    );
+    this.ffmpegPath = this.config.get<string>('radio.ffmpegPath', 'ffmpeg');
+
+    // AUDIO CONFIG
+    this.audioBitrate = this.config.get('radio.audioBitrate', '128k');
+    this.sampleRate = this.config.get('radio.sampleRate', 44100);
+
+    // ICECAST
     this.icecastHost = this.config.get('icecast.host', '127.0.0.1');
     this.icecastPort = this.config.get('icecast.port', 8000);
     this.icecastMount = this.config.get('icecast.mount', '/live.mp3');
@@ -89,7 +108,7 @@ export class RadioStreamService
       `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`;
 
     // Spawn a ffmpeg command
-    this.activeProcess = spawn('ffmpeg', [
+    this.activeProcess = spawn(this.ffmpegPath, [
       '-re', // Read input at native rate (prevents ffmpeg from pushing data too fast)
       '-i', // Input source (your pipe / stream source)
       this.pipePath, // Disable video (audio-only stream)
@@ -99,10 +118,10 @@ export class RadioStreamService
       'libmp3lame',
       // Audio bitrate (128 kbps = decent quality vs bandwidth balance)
       '-ab',
-      '128k',
+      this.audioBitrate,
       // Audio sample rate (44.1 kHz = standard for music streaming)
       '-ar',
-      '44100',
+      this.sampleRate.toString(),
       // Audio filter:
       // - aresample=async=1 → fixes timing drift by resampling dynamically
       // - first_pts=0 → resets timestamps to start clean (prevents gaps at start)

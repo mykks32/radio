@@ -21,8 +21,8 @@ export class RadioGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleConnection(socket: Socket) {
     this.logger.log(`Client connected: ${socket.id}`);
     this.server.emit(WS_EVENTS.CONNECTED, {
-      message: `Client connect ${socket.id}`
-    })
+      message: `Client connect ${socket.id}`,
+    });
   }
 
   handleDisconnect(socket: Socket) {

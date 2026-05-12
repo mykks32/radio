@@ -1,0 +1,25 @@
+# Kubernetes API version for PodDisruptionBudget
+apiVersion: policy/v1
+
+# Resource type
+kind: PodDisruptionBudget
+
+# Metadata for PDB
+metadata:
+  # PDB name
+  name: radio
+  # Namespace
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: radio
+
+# Disruption policy spec
+spec:
+  # Minimum pods that must remain available during disruptions
+  minAvailable: 1
+
+  # Select pods to protect
+  selector:
+    matchLabels:
+      app: radio

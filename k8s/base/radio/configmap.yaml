@@ -1,0 +1,18 @@
+# Kubernetes API version
+apiVersion: v1
+
+# Resource type
+kind: ConfigMap
+
+# ConfigMap metadata
+metadata:
+  # ConfigMap name
+  name: radio-config
+  # Namespace where ConfigMap is created
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: radio
+
+## Key-value configuration data
+data: {}

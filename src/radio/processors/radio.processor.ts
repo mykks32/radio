@@ -19,9 +19,12 @@ export class RadioProcessor extends WorkerHost {
     @InjectQueue(QUEUE.RADIO_QUEUE) private readonly queue: Queue,
   ) {
     super();
+    this.logger.log('RadioProcessor initialized');
   }
 
-  async process(job: Job): Promise<{ played: boolean, trackId?: string | null }> {
+  async process(
+    job: Job,
+  ): Promise<{ played: boolean; trackId?: string | null }> {
     if (job.name !== PLAY_NEXT_JOB) return { played: false };
 
     const track = job.data.track;

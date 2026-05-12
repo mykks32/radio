@@ -1,0 +1,10 @@
+# Kubernetes API version
+apiVersion: v1
+
+# Resource type
+kind: Namespace
+
+# Namespace metadata
+metadata:
+  # Namespace name
+  name: radio

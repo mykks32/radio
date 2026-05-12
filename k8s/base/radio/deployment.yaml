@@ -1,0 +1,74 @@
+# Kubernetes API version for Deployment
+apiVersion: apps/v1
+
+# Resource type
+kind: Deployment
+
+# Deployment metadata
+metadata:
+  # Deployment name
+  name: radio
+  # Namespace
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: radio
+
+# Deployment specification
+spec:
+  # Number of pod replicas
+  replicas: 2
+
+  # Selector to match pods
+  selector:
+    matchLabels:
+      app: radio
+
+  # Pod template
+  template:
+    metadata:
+      # Labels for pods
+      labels:
+        app: radio
+
+    spec:
+      # Container specification
+      containers:
+        - name: radio
+          # Docker image
+          image: mykks32/radio:latest
+          # Always pull latest image
+          imagePullPolicy: Always
+          # Container port
+          ports:
+            - containerPort: 3000
+
+          # Environment variables from ConfigMap & Secret
+          envFrom:
+            - secretRef:
+                name: radio-secret
+
+          # Resource allocation
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # Readiness check (app ready to receive traffic)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+          # Liveness check (restart if unhealthy)
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 10

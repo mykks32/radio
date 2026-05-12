@@ -7,7 +7,7 @@ metadata:
   # Name of the Service
   name: icecast
   # Namespace where this Service belongs
-  namespace: friendslikeus-prod
+  namespace: radio
   # Labels for organizing and selecting
   labels:
     app: icecast
@@ -15,7 +15,7 @@ metadata:
 # Specification for the Service's behavior
 spec:
   # Service type (ClusterIP is internal only)
-  type: NodePort
+  type: ClusterIP
 
   # Label selector to find which pods to route traffic to
   selector:
@@ -31,5 +31,3 @@ spec:
       port: 8000
       # Port on the container to forward to
       targetPort: 8000
-      # Static port on each node to expose externally (must be in range 30000-32767)
-      nodePort: 30900

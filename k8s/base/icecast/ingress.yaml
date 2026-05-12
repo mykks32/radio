@@ -7,7 +7,11 @@ metadata:
   # Name of the Ingress
   name: icecast
   # Namespace where this Ingress belongs
-  namespace: friendslikeus-prod
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: icecast
+
   # Annotations for nginx controller configuration
   annotations:
     # Disables response buffering for streaming
@@ -27,7 +31,7 @@ spec:
   # Routing rules for incoming traffic
   rules:
     # Domain name this Ingress responds to
-    - host: radio.friendslikeus.com
+    - host: radio.icecast.com
       # HTTP path routing configuration
       http:
         paths:

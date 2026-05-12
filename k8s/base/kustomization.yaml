@@ -1,0 +1,33 @@
+# Kustomize resource list
+
+resources:
+  # Namespace definition
+  - namespace.yaml
+
+  # -----------------
+  # Radio Resources
+  # ------------------
+  # ConfigMap for app configuration
+  - radio/configmap.yaml
+  # Deployment for running application pods
+  - radio/deployment.yaml
+  # Service for internal networking
+  - radio/service.yaml
+  # Ingress for external access
+  - radio/ingress.yaml
+  # Horizontal Pod Autoscaler for scaling
+  - radio/hpa.yaml
+  # Pod Disruption Budget for availability safety
+  - radio/pdb.yaml
+
+  # -------------------
+  # Icecast Resources
+  # --------------------
+  # ConfigMap for app configuration
+  - icecast/configmap.yaml
+  # Deployment for running application pods
+  - icecast/deployment.yaml
+  # Service for internal networking
+  - icecast/service.yaml
+  # Ingress for external access
+  - icecast/ingress.yaml

@@ -1,0 +1,4 @@
+docker run -d \
+    -p 8080:8080 \
+    -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=35.237.71.136:9092 \
+    provectuslabs/kafka-ui

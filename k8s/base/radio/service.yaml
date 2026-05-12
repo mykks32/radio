@@ -1,0 +1,29 @@
+# Kubernetes API version
+apiVersion: v1
+
+# Resource type
+kind: Service
+
+# Service metadata
+metadata:
+  # Service name
+  name: radio
+  # Namespace
+  namespace: radio
+  # Labels for organizing and selecting resources
+  labels:
+    app: radio
+
+# Service specification
+spec:
+  # Select pods with this label
+  selector:
+    app: radio
+
+  # Port configuration
+  ports:
+    - port: 80          # Exposed service port
+      targetPort: 3000  # Container port
+
+  # Internal cluster-only service
+  type: ClusterIP
