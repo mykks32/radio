@@ -24,8 +24,8 @@ data:
         <location>Earth</location>
     
         <!-- Administrator contact email -->
-        <admin>admin@friendslikeus.com</admin>
-    
+        <admin>admin@radio.icecast.com</admin>
+        
         <!-- Server limits and performance tuning -->
         <limits>
     
@@ -37,19 +37,19 @@ data:
     
             <!-- Number of worker threads -->
             <threadpool>8</threadpool>
-    
-            <!-- Queue buffer size in bytes -->
+            
+            <!-- Queue buffer size in bytes - 1MB for stable streaming -->
             <queue-size>1048576</queue-size>
-    
-            <!-- Listener connection timeout -->
-            <client-timeout>30</client-timeout>
-    
+            
+            <!-- Listener connection timeout - 0 disables, prevents stream drops -->
+            <client-timeout>0</client-timeout>
+            
             <!-- HTTP header timeout -->
             <header-timeout>15</header-timeout>
-    
-            <!-- Source timeout -->
-            <source-timeout>10</source-timeout>
-    
+            
+            <!-- Source timeout - increased from 10 for unstable connections -->
+            <source-timeout>30</source-timeout>
+            
             <!-- Enable burst for faster stream startup -->
             <burst-on-connect>1</burst-on-connect>
     
@@ -57,8 +57,8 @@ data:
             <burst-size>65536</burst-size>
     
         </limits>
-    
-        <!-- Authentication configuration -->
+        
+        <!-- Authentication - values injected from k8s Secret via initContainer -->
         <authentication>
     
             <!-- Password used by source clients -->
@@ -76,49 +76,54 @@ data:
         </authentication>
     
         <!-- Public hostname -->
-        <hostname>radio.friendslikeus.com</hostname>
-    
+        <hostname>radio.icecast.com</hostname>
+        
         <!-- Icecast listening socket -->
         <listen-socket>
             <port>8000</port>
         </listen-socket>
-    
-        <!-- CORS headers -->
+        
+        <!-- HTTP headers -->
         <http-headers>
-            <header name="Access-Control-Allow-Origin" value="*" />
-            <header name="Access-Control-Allow-Headers" value="Origin, Accept, X-Requested-With" />
-            <header name="Access-Control-Allow-Methods" value="GET, OPTIONS" />
+            <header name="Access-Control-Allow-Origin" value="*"/>
+            <header name="Access-Control-Allow-Headers" value="Origin, Accept, X-Requested-With"/>
+            <header name="Access-Control-Allow-Methods" value="GET, OPTIONS"/>
+            <!-- Prevent proxies from caching the stream -->
+            <header name="Cache-Control" value="no-cache, no-store"/>
+            <header name="Pragma" value="no-cache"/>
         </http-headers>
-    
+        
         <!-- Stream mount configuration -->
         <mount type="normal">
-    
+            
             <!-- Stream endpoint -->
             <mount-name>/song.mp3</mount-name>
-    
+            
             <!-- Maximum listeners for this mount -->
             <max-listeners>1000</max-listeners>
-    
+            
+            <!-- No listener duration limit -->
+            <max-listener-duration>0
+            </max-listener-duration>
+            
             <!-- Mount burst size -->
             <burst-size>65536</burst-size>
-    
-            <!-- Stream title -->
-            <stream-name>FriendsLikeUs Radio</stream-name>
-    
-            <!-- Stream description -->
-            <stream-description>FriendsLikeUs Live Radio</stream-description>
-    
-            <!-- Website URL -->
-            <stream-url>https://friendslikeus.com</stream-url>
-    
+            
+            <!-- Stream metadata -->
+            <stream-name>radio.icecast.com</stream-name>
+            <stream-description>radio.icecast.com</stream-description>
+            <stream-url>https://radio.icecast.com/song.mp3</stream-url>
+            <genre>Various</genre>
+            
             <!-- Hide from public Icecast directories -->
             <public>0</public>
-    
+            <hidden>0</hidden>
+        
         </mount>
-    
+        
         <!-- Enable serving static files -->
         <fileserve>1</fileserve>
-    
+        
         <!-- Icecast directories -->
         <paths>
     
@@ -133,7 +138,9 @@ data:
     
             <!-- Admin UI directory -->
             <adminroot>/usr/share/icecast2/admin</adminroot>
-    
+            <pidfile>/var/run/icecast2/icecast2.pid</pidfile>
+            <!-- Redirect root to status page -->
+            <alias source="/" destination="/status.xsl"/>
         </paths>
     
         <!-- Logging configuration -->
@@ -160,4 +167,5 @@ data:
             <chroot>0</chroot>
     
         </security>
+    
     </icecast>
