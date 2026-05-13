@@ -5,12 +5,18 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { spawn, ChildProcess, execSync } from 'node:child_process';
+import {
+  spawn,
+  ChildProcess,
+  execSync,
+  execFileSync,
+} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { TrackMeta } from '../../playlist/playlist.types';
 import { WS_EVENTS } from '../../common/constants/provider.constant';
+import { PlaylistService } from '../../playlist/services/playlist.service';
 
 @Injectable()
 export class RadioStreamService
@@ -34,7 +40,10 @@ export class RadioStreamService
   // ICECAST
   private readonly icecastUrl: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly playlistService: PlaylistService,
+  ) {
     super();
 
     // PIPE + FFMPEG
@@ -49,6 +58,46 @@ export class RadioStreamService
     this.icecastUrl = this.config.get<string>('icecast.sourceUrl') as string;
   }
 
+  /**
+   * Runs when NestJS module starts
+   * Initializes pipe + FFmpeg + write stream
+   */
+  onModuleInit() {
+    this.logger.log('Radio stream service initialized.');
+
+    this.ensurePipe();
+    this.startFFmpeg();
+
+    // Creates writable stream to FIFO pipe
+    this.pipeStream = fs.createWriteStream(this.pipePath, {
+      flags: 'a',
+    });
+
+    this.logger.log('Stream pipeline ready');
+  }
+
+  // Runs when NestJS shuts down
+  // Cleans up FFmpeg process
+  onModuleDestroy() {
+    this.stopCurrent();
+  }
+
+  // Accessors
+  // Returns currently playing track
+  get nowPlaying() {
+    return this.currentTrack;
+  }
+
+  // Stops FFmpeg and resets state
+  stopCurrent() {
+    if (this.activeProcess) {
+      this.activeProcess.kill('SIGTERM');
+      this.activeProcess = null;
+    }
+    this.currentTrack = null;
+  }
+
+  // Private Helpers
   /**
    * Creates FIFO pipe if it doesn't exist
    * Acts as communication bridge between Node.js and FFmpeg
@@ -70,32 +119,10 @@ export class RadioStreamService
   }
 
   /**
-   * Runs when NestJS module starts
-   * Initializes pipe + FFmpeg + write stream
-   */
-  onModuleInit() {
-    this.logger.log('Radio stream service initialized.');
-
-    this.ensurePipe();
-    this.startFFmpeg();
-
-    // Creates writable stream to FIFO pipe
-    this.pipeStream = fs.createWriteStream(this.pipePath, {
-      flags: 'a',
-    });
-
-    this.logger.log('Stream pipeline ready');
-  }
-
-  /**
    * Starts FFmpeg once and keeps it running for entire system lifecycle
    * Reads audio from FIFO pipe and streams it to Icecast
    */
   private startFFmpeg() {
-    // const icecastUrl =
-    //   `icecast://${this.icecastUser}:${this.icecastPass}` +
-    //   `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`
-
     // Spawn a ffmpeg command
     this.activeProcess = spawn(this.ffmpegPath, [
       '-re', // Read input at native rate (prevents ffmpeg from pushing data too fast)
@@ -152,29 +179,52 @@ export class RadioStreamService
     });
   }
 
-  // Runs when NestJS shuts down
-  // Cleans up FFmpeg process
-  onModuleDestroy() {
-    this.stopCurrent();
-  }
-
-  // Returns currently playing track
-  get nowPlaying() {
-    return this.currentTrack;
-  }
-
-  // Stops FFmpeg and resets state
-  stopCurrent() {
-    if (this.activeProcess) {
-      this.activeProcess.kill('SIGTERM');
-      this.activeProcess = null;
-    }
-    this.currentTrack = null;
-  }
-
   /**
-   * Main function: streams a single track into live radio pipeline
-   * File → ReadStream → FIFO pipe → FFmpeg → Icecast
+   * Reads the duration of an audio file using ffprobe.
+   * Returns duration in milliseconds, or null if it fails.
+   *
+   * ffprobe -v error -show_entries format=duration -of csv=p=0 <file>
+   */
+  private getTrackDurationMs(filePath: string): number | null {
+    try {
+      // ffprobe is bundled with ffmpeg — assume same directory
+      const ffprobePath = this.ffmpegPath.replace(/ffmpeg$/, 'ffprobe');
+
+      const output = execFileSync(
+        ffprobePath,
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'format=duration',
+          '-of',
+          'csv=p=0',
+          filePath,
+        ],
+        { timeout: 5_000 },
+      )
+        .toString()
+        .trim();
+
+      const seconds = parseFloat(output);
+      if (Number.isNaN(seconds)) return null;
+
+      return Math.round(seconds * 1000);
+    } catch (err) {
+      this.logger.warn(`ffprobe failed for ${filePath}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  // Main streaming logic
+  /**
+   * Pipes a single track into the FIFO → FFmpeg → Icecast pipeline.
+   *
+   * Key behaviour:
+   * - Records track start + duration to Redis so any pod (or the refill logic)
+   *   knows how much time is left in the playlist.
+   * - Emits TRACK_START / TRACK_ENDED events.
+   * - Does NOT restart FFmpeg between tracks — the pipe stays open.
    */
   streamTrack(track: TrackMeta): void {
     // this.stopCurrent();
@@ -183,14 +233,18 @@ export class RadioStreamService
 
     if (!fs.existsSync(filePath)) {
       this.logger.error(`File not found: ${filePath}`);
+      this.emit(WS_EVENTS.TRACK_ENDED, track);
       return;
     }
 
     this.currentTrack = track;
-
     this.logger.log(`▶ Streaming: ${track.title}`);
 
-    // START EVENT
+    // Record timing to Redis
+    const durationMs = this.getTrackDurationMs(filePath) ?? 0;
+    void this.playlistService.recordTrackStart(track.id, durationMs);
+
+    // Emit start event (gateway picks this up)
     this.emit(WS_EVENTS.TRACK_START, track);
 
     // Stream into PIPE (no ffmpeg restart)

@@ -250,4 +250,32 @@ export class RedisRepository {
   async ping(): Promise<string> {
     return this.client.ping();
   }
+
+  // ─────────────────────────────────────────────
+  // DISTRIBUTED LOCK / LEADER ELECTION
+  // ─────────────────────────────────────────────
+
+  /**
+   * Atomic SET NX PX
+   *
+   * Creates key only if it does not exist
+   * and sets TTL in milliseconds.
+   */
+  async setNxPx(
+    key: string,
+    value: string,
+    ttlMs: number,
+  ): Promise<string | null> {
+    return this.client.set(key, value, {
+      NX: true,
+      PX: ttlMs,
+    });
+  }
+
+  /**
+   * Renew TTL in milliseconds.
+   */
+  async pexpire(key: string, ttlMs: number): Promise<number> {
+    return this.client.pExpire(key, ttlMs);
+  }
 }

@@ -4,9 +4,14 @@ import { Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 const logger = new Logger('Bootstrap');
+const isProd = process.env.NODE_ENV === 'prod';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: isProd
+      ? ['error', 'warn']
+      : ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
 
   app.enableCors({
     origin: '*',
