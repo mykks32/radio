@@ -32,32 +32,21 @@ export class RadioStreamService
   private activeProcess: ChildProcess | null = null;
 
   // ICECAST
-  private readonly icecastHost: string;
-  private readonly icecastPort: number;
-  private readonly icecastMount: string;
-  private readonly icecastUser: string;
-  private readonly icecastPass: string;
+  private readonly icecastUrl: string;
 
   constructor(private readonly config: ConfigService) {
     super();
 
     // PIPE + FFMPEG
-    this.pipePath = this.config.get<string>(
-      'radio.pipePath',
-      '/tmp/radio_pipe',
-    );
-    this.ffmpegPath = this.config.get<string>('radio.ffmpegPath', 'ffmpeg');
+    this.pipePath = this.config.get<string>('radio.pipePath') as string;
+    this.ffmpegPath = this.config.get<string>('radio.ffmpegPath') as string;
 
     // AUDIO CONFIG
-    this.audioBitrate = this.config.get('radio.audioBitrate', '128k');
-    this.sampleRate = this.config.get('radio.sampleRate', 44100);
+    this.audioBitrate = this.config.get<string>('radio.audioBitrate') as string;
+    this.sampleRate = this.config.get<number>('radio.sampleRate') as number;
 
     // ICECAST
-    this.icecastHost = this.config.get('icecast.host', '127.0.0.1');
-    this.icecastPort = this.config.get('icecast.port', 8000);
-    this.icecastMount = this.config.get('icecast.mount', '/live.mp3');
-    this.icecastUser = this.config.get('icecast.user', 'source');
-    this.icecastPass = this.config.get('icecast.pass', 'hackme');
+    this.icecastUrl = this.config.get<string>('icecast.sourceUrl') as string;
   }
 
   /**
@@ -103,9 +92,9 @@ export class RadioStreamService
    * Reads audio from FIFO pipe and streams it to Icecast
    */
   private startFFmpeg() {
-    const icecastUrl =
-      `icecast://${this.icecastUser}:${this.icecastPass}` +
-      `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`;
+    // const icecastUrl =
+    //   `icecast://${this.icecastUser}:${this.icecastPass}` +
+    //   `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`
 
     // Spawn a ffmpeg command
     this.activeProcess = spawn(this.ffmpegPath, [
@@ -131,7 +120,7 @@ export class RadioStreamService
       '-f',
       'mp3',
       // Destination (Icecast server URL with mount + auth)
-      icecastUrl,
+      this.icecastUrl,
     ]);
 
     this.logger.log('FFmpeg streaming started.');
