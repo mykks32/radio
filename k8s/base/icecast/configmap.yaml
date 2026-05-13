@@ -19,22 +19,22 @@ data:
   icecast.xml: |
     <!-- Root Icecast configuration -->
     <icecast>
-    
+        
         <!-- Server location -->
         <location>Earth</location>
-    
+        
         <!-- Administrator contact email -->
         <admin>admin@radio.icecast.com</admin>
         
         <!-- Server limits and performance tuning -->
         <limits>
-    
+            
             <!-- Maximum number of connected listeners -->
             <clients>1000</clients>
-    
+            
             <!-- Maximum number of streaming sources -->
             <sources>20</sources>
-    
+            
             <!-- Number of worker threads -->
             <threadpool>8</threadpool>
             
@@ -52,29 +52,30 @@ data:
             
             <!-- Enable burst for faster stream startup -->
             <burst-on-connect>1</burst-on-connect>
-    
+            
             <!-- Burst size in bytes -->
             <burst-size>65536</burst-size>
-    
+        
         </limits>
         
         <!-- Authentication - values injected from k8s Secret via initContainer -->
         <authentication>
-    
+            
             <!-- Password used by source clients -->
             <source-password>${SOURCE_PASSWORD}</source-password>
-    
+            
             <!-- Password used by relay servers -->
             <relay-password>${RELAY_PASSWORD}</relay-password>
-    
+            
             <!-- Icecast admin username -->
-            <admin-user>admin</admin-user>
-    
+            <admin-user>admin
+            </admin-user>
+            
             <!-- Icecast admin password -->
             <admin-password>${ADMIN_PASSWORD}</admin-password>
-    
+        
         </authentication>
-    
+        
         <!-- Public hostname -->
         <hostname>radio.icecast.com</hostname>
         
@@ -103,8 +104,7 @@ data:
             <max-listeners>1000</max-listeners>
             
             <!-- No listener duration limit -->
-            <max-listener-duration>0
-            </max-listener-duration>
+            <max-listener-duration>0</max-listener-duration>
             
             <!-- Mount burst size -->
             <burst-size>65536</burst-size>
@@ -126,46 +126,47 @@ data:
         
         <!-- Icecast directories -->
         <paths>
-    
+            
             <!-- Base directory -->
-            <basedir>/usr/share/icecast2</basedir>
-    
+            <basedir>/usr/share/icecast2
+            </basedir>
+            
             <!-- Log directory -->
             <logdir>/var/log/icecast2</logdir>
-    
+            
             <!-- Web UI directory -->
             <webroot>/usr/share/icecast2/web</webroot>
-    
+            
             <!-- Admin UI directory -->
             <adminroot>/usr/share/icecast2/admin</adminroot>
             <pidfile>/var/run/icecast2/icecast2.pid</pidfile>
             <!-- Redirect root to status page -->
             <alias source="/" destination="/status.xsl"/>
         </paths>
-    
+        
         <!-- Logging configuration -->
         <logging>
-    
+            
             <!-- Access log -->
             <accesslog>access.log</accesslog>
-    
+            
             <!-- Error log -->
             <errorlog>error.log</errorlog>
-    
+            
             <!-- Log level -->
             <loglevel>2</loglevel>
-    
+            
             <!-- Archive rotated logs -->
             <logarchive>1</logarchive>
-    
+        
         </logging>
-    
+        
         <!-- Security configuration -->
         <security>
-    
+            
             <!-- Disable chroot -->
             <chroot>0</chroot>
-    
+        
         </security>
     
     </icecast>
