@@ -4,7 +4,7 @@
 FROM node:22 AS development
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.15.4
 
 # Set working directory inside container
 WORKDIR /app
@@ -32,7 +32,7 @@ USER node
 FROM node:22 AS build
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.15.4
 
 # Set working directory
 WORKDIR /app
