@@ -1,15 +1,14 @@
-export const KAFKA_TOPIC = {
-  RADIO_EVENTS: 'radio.events',
-} as const;
+const Topics = [
+  // Playlist Topic
+  'playlist_build',
+  'track_added_manually',
+  'track_started',
+  'track_ended',
+] as const
 
-export const KAFKA_EVENT = {
-  PLAYLIST_BUILT: 'PLAYLIST_BUILT',
-  TRACKS_ADDED_MANUALLY: 'TRACKS_ADDED_MANUALLY',
-  TRACK_STARTED: 'TRACK_STARTED',
-  TRACK_ENDED: 'TRACK_ENDED',
-} as const;
+export type TopicsIntersection = (typeof Topics)[number]
 
-// types
-export type KafkaTopic = (typeof KAFKA_TOPIC)[keyof typeof KAFKA_TOPIC];
-
-export type KafkaEventType = (typeof KAFKA_EVENT)[keyof typeof KAFKA_EVENT];
+export const KafkaTopic = Topics.reduce((acc, topic) => {
+  acc[topic] = `${process.env.NODE_ENV}_${topic}`
+  return acc
+}, {}) as Record<TopicsIntersection, TopicsIntersection>

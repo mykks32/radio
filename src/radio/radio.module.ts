@@ -1,16 +1,19 @@
-import { Module } from '@nestjs/common';
-import { RadioController } from './radio.controller';
-import { BullModule } from '@nestjs/bullmq';
-import { QUEUE } from '../queue/queue.constant';
-import { KafkaModule } from '../kafka/kafka.module';
-import { PlaylistModule } from '../playlist/playlist.module';
-import { RadioService } from './services/radio.service';
-import { RadioProcessor } from './processors/radio.processor';
-import { RadioStreamService } from './services/radio-stream.service';
-import { BullBoardModule } from '@bull-board/nestjs';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
-import { RadioGateway } from './gateways/radio.gateway';
+import { Module } from '@nestjs/common'
+import { RadioController } from './controllers/radio.controller'
+import { BullModule } from '@nestjs/bullmq'
+import { QUEUE } from '../queue/queue.constant'
+import { KafkaModule } from '../kafka/kafka.module'
+import { RadioService } from './services/radio.service'
+import { RadioProcessor } from './processors/radio.processor'
+import { RadioStreamService } from './services/radio-stream.service'
+import { BullBoardModule } from '@bull-board/nestjs'
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
+import { ExpressAdapter } from '@bull-board/express'
+import { RadioGateway } from './gateways/radio.gateway'
+import { RadioTrackService } from './services/radio-track.service'
+import { RadioTrackBuilderService } from './services/radio-track-builder.service'
+import { MusicRepository } from './repositories/music.repository'
+import { RadioTrackController } from './controllers/radio-track.controller'
 
 @Module({
   imports: [
@@ -29,10 +32,17 @@ import { RadioGateway } from './gateways/radio.gateway';
       adapter: BullMQAdapter,
     }),
     KafkaModule,
-    PlaylistModule,
   ],
-  controllers: [RadioController],
-  providers: [RadioService, RadioStreamService, RadioProcessor, RadioGateway],
+  controllers: [RadioController, RadioTrackController],
+  providers: [
+    RadioService,
+    RadioStreamService,
+    RadioProcessor,
+    RadioGateway,
+    RadioTrackService,
+    RadioTrackBuilderService,
+    MusicRepository,
+  ],
   exports: [RadioService],
 })
 export class RadioModule {}

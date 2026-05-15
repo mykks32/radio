@@ -1,8 +1,8 @@
 export interface TrackMeta {
-  id: string;
-  title: string;
-  artist: string;
-  filePath: string;
+  id: string
+  title: string
+  artist: string
+  filePath: string
 }
 
 export enum BuildStrategy {
@@ -13,8 +13,8 @@ export enum BuildStrategy {
 }
 
 export interface BuildOptions {
-  strategy?: BuildStrategy;
-  genre?: string;
-  limit?: number;
-  swapImmediately?: boolean;
+  strategy?: BuildStrategy
+  genre?: string
+  limit?: number
+  swapImmediately?: boolean
 }

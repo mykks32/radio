@@ -1,25 +1,60 @@
-# Application services
+name: radio
+
 services:
-  # Radio application service
-  radio:
 
-    # Build configuration
-    build:
-      # Project root context
-      context: ..
-      # Dockerfile location
-      dockerfile: docker/Dockerfile
+  # Radio application
+  #  radio:
+  #    build:
+  #      context: ..
+  #      dockerfile: docker/Dockerfile
+  #    container_name: radio
+  #    ports:
+  #      - "3000:3000"
+  #    env_file:
+  #      - ../.env
+  #    restart: unless-stopped
+  #    depends_on:
+  #      - kafka
+  #      - redis
+  #      - icecast
+  #    restart: unless-stopped
 
-    # Container name
-    container_name: radio
-
-    # Port mapping
+  # Redis
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
     ports:
-      - "3000:3000"
-
-    # Environment variables file
-    env_file:
-      - ../.env
-
-    # Restart policy
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
     restart: unless-stopped
+
+  # Redis Insight
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: redis-insight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis-insight-data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Icecast
+  icecast:
+    image: moul/icecast
+    container_name: icecast
+    ports:
+      - "8000:8000"
+    environment:
+      ICECAST_SOURCE_PASSWORD: hackme
+      ICECAST_ADMIN_PASSWORD: admin
+      ICECAST_PASSWORD: hackme
+      ICECAST_RELAY_PASSWORD: hackme
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  redis-insight-data:

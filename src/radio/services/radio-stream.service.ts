@@ -3,50 +3,53 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { spawn, ChildProcess, execSync } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { EventEmitter } from 'node:events';
-import { TrackMeta } from '../../playlist/playlist.types';
-import { WS_EVENTS } from '../../common/constants/provider.constant';
+} from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { spawn, ChildProcess, execSync } from 'node:child_process'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { EventEmitter } from 'node:events'
+import { TrackMeta } from '../radio.types'
+import { WS_EVENTS } from '../../common/constants/provider.constant'
 
 @Injectable()
 export class RadioStreamService
   extends EventEmitter
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(RadioStreamService.name);
+  private readonly logger = new Logger(RadioStreamService.name)
 
   // PIPE + FFMPEG
-  private readonly pipePath: string;
-  private readonly ffmpegPath: string;
+  private readonly pipePath: string
+  private readonly ffmpegPath: string
   // AUDIO
-  private readonly audioBitrate: string;
-  private readonly sampleRate: number;
+  private readonly audioBitrate: string
+  private readonly sampleRate: number
 
-  private pipeStream: fs.WriteStream | null = null;
+  private pipeStream: fs.WriteStream | null = null
 
-  private currentTrack: TrackMeta | null = null;
-  private activeProcess: ChildProcess | null = null;
+  private currentTrack: TrackMeta | null = null
+  private activeProcess: ChildProcess | null = null
+
+  // track the read stream so we can unpipe it
+  private activeReadStream: fs.ReadStream | null = null
 
   // ICECAST
-  private readonly icecastUrl: string;
+  private readonly icecastUrl: string
 
   constructor(private readonly config: ConfigService) {
-    super();
+    super()
 
     // PIPE + FFMPEG
-    this.pipePath = this.config.get<string>('radio.pipePath') as string;
-    this.ffmpegPath = this.config.get<string>('radio.ffmpegPath') as string;
+    this.pipePath = this.config.get<string>('radio.pipePath') as string
+    this.ffmpegPath = this.config.get<string>('radio.ffmpegPath') as string
 
     // AUDIO CONFIG
-    this.audioBitrate = this.config.get<string>('radio.audioBitrate') as string;
-    this.sampleRate = this.config.get<number>('radio.sampleRate') as number;
+    this.audioBitrate = this.config.get<string>('radio.audioBitrate') as string
+    this.sampleRate = this.config.get<number>('radio.sampleRate') as number
 
     // ICECAST
-    this.icecastUrl = this.config.get<string>('icecast.sourceUrl') as string;
+    this.icecastUrl = this.config.get<string>('icecast.sourceUrl') as string
   }
 
   /**
@@ -55,36 +58,26 @@ export class RadioStreamService
    */
   private ensurePipe() {
     // ensure the tmp/ directory exists before touching the pipe
-    fs.mkdirSync(path.dirname(this.pipePath), { recursive: true });
+    fs.mkdirSync(path.dirname(this.pipePath), { recursive: true })
 
     if (fs.existsSync(this.pipePath)) {
       // Remove stale pipe from a previous run
-      fs.unlinkSync(this.pipePath);
+      fs.unlinkSync(this.pipePath)
     }
 
-    this.logger.log('Creating FIFO pipe');
+    this.logger.log('Creating FIFO pipe')
 
     // execSync instead of spawn — blocks until mkfifo completes,
     // so the FIFO is guaranteed to exist before createWriteStream is called
-    execSync(`mkfifo ${this.pipePath}`);
+    execSync(`mkfifo ${this.pipePath}`)
   }
 
   /**
    * Runs when NestJS module starts
-   * Initializes pipe + FFmpeg + write stream
+   * Only initializes the service — stream starts when radio.service calls startStream()
    */
   onModuleInit() {
-    this.logger.log('Radio stream service initialized.');
-
-    this.ensurePipe();
-    this.startFFmpeg();
-
-    // Creates writable stream to FIFO pipe
-    this.pipeStream = fs.createWriteStream(this.pipePath, {
-      flags: 'a',
-    });
-
-    this.logger.log('Stream pipeline ready');
+    this.logger.log('Radio stream service initialized.')
   }
 
   /**
@@ -92,15 +85,10 @@ export class RadioStreamService
    * Reads audio from FIFO pipe and streams it to Icecast
    */
   private startFFmpeg() {
-    // const icecastUrl =
-    //   `icecast://${this.icecastUser}:${this.icecastPass}` +
-    //   `@${this.icecastHost}:${this.icecastPort}${this.icecastMount}`
-
-    // Spawn a ffmpeg command
     this.activeProcess = spawn(this.ffmpegPath, [
       '-re', // Read input at native rate (prevents ffmpeg from pushing data too fast)
       '-i', // Input source (your pipe / stream source)
-      this.pipePath, // Disable video (audio-only stream)
+      this.pipePath,
       // Set audio codec to MP3 (widely supported for Icecast)
       '-vn',
       '-acodec',
@@ -121,55 +109,121 @@ export class RadioStreamService
       'mp3',
       // Destination (Icecast server URL with mount + auth)
       this.icecastUrl,
-    ]);
+    ])
 
-    this.logger.log('FFmpeg streaming started.');
+    this.logger.log('FFmpeg streaming started.')
 
-    // Debug logs from FFmpeg
-    // stdout → raw media bytes only, and only if output is `-`  ✗ (never in your case)
+    // stdout → raw media bytes only, and only if output is `-` ✗ (never in your case)
     this.activeProcess.stdout?.on('data', (data) => {
-      this.logger.debug('stdout', data.toString());
-    });
+      this.logger.debug('stdout', data.toString())
+    })
     // stderr → all logs, info, warnings, errors, progress
     this.activeProcess.stderr?.on('data', (data) => {
-      const msg = data.toString();
+      const msg = data.toString()
 
       if (
         msg.includes('Error') ||
         msg.includes('error') ||
         msg.includes('Invalid')
       ) {
-        this.logger.error(msg);
+        this.logger.error(msg)
       } else {
-        this.logger.debug('ffmpeg', msg);
+        this.logger.debug('ffmpeg', msg)
       }
-    });
+    })
 
     // Handles FFmpeg crash/exit
     this.activeProcess.on('close', () => {
-      this.logger.warn('FFmpeg stream closed.');
-      this.activeProcess = null;
-    });
+      this.logger.warn('FFmpeg stream closed.')
+      this.activeProcess = null
+
+      // when stopStream() already destroyed it before close fires
+      if (this.pipeStream && !this.pipeStream.destroyed) {
+        this.pipeStream.destroy()
+        this.pipeStream = null
+      }
+    })
+  }
+
+  /**
+   * Called by radio.service on start()
+   * Creates fresh pipe + FFmpeg + write stream
+   */
+  startStream() {
+    this.ensurePipe()
+
+    // create pipeStream FIRST so FFmpeg has a writer when it opens the pipe
+    this.pipeStream = fs.createWriteStream(this.pipePath, { flags: 'a' })
+
+    // ignore write-after-destroy and EPIPE — both happen on clean stop
+    // when FFmpeg flushes its last bytes as it exits after SIGTERM
+    this.pipeStream.on('error', (err: NodeJS.ErrnoException) => {
+      if (
+        err.code === 'EPIPE' ||
+        err.message.includes('after a stream was destroyed')
+      )
+        return
+      this.logger.error(`Pipe stream error: ${err.message}`)
+    })
+
+    // start FFmpeg after pipeStream is ready
+    this.startFFmpeg()
+
+    this.logger.log('Stream pipeline ready')
+  }
+
+  /**
+   * Called by radio.service on stop()
+   * Kills FFmpeg and destroys pipe — full clean disconnect from Icecast
+   */
+  stopStream() {
+    // unpipe active read stream first before destroying pipe
+    if (this.activeReadStream) {
+      this.activeReadStream.unpipe()
+      this.activeReadStream.destroy()
+      this.activeReadStream = null
+    }
+
+    this.currentTrack = null
+
+    if (this.activeProcess) {
+      // destroy pipe only after ffmpeg fully exits
+      // prevents "write after destroy" — ffmpeg flushes last bytes on SIGTERM
+      this.activeProcess.once('close', () => {
+        this.pipeStream?.destroy()
+        this.pipeStream = null
+      })
+      this.activeProcess.kill('SIGTERM')
+      this.activeProcess = null
+    } else {
+      // no ffmpeg running, destroy pipe immediately
+      this.pipeStream?.destroy()
+      this.pipeStream = null
+    }
   }
 
   // Runs when NestJS shuts down
   // Cleans up FFmpeg process
   onModuleDestroy() {
-    this.stopCurrent();
+    this.stopStream()
   }
 
   // Returns currently playing track
   get nowPlaying() {
-    return this.currentTrack;
+    return this.currentTrack
   }
 
-  // Stops FFmpeg and resets state
+  // Stops current track only — FFmpeg keeps running
   stopCurrent() {
-    if (this.activeProcess) {
-      this.activeProcess.kill('SIGTERM');
-      this.activeProcess = null;
+    if (this.activeReadStream) {
+      this.activeReadStream.unpipe()
+      this.activeReadStream.destroy()
+      this.activeReadStream = null
     }
-    this.currentTrack = null;
+
+    // nothing to kill here since we pipe fs.ReadStream directly
+    // just reset state so next track can start clean
+    this.currentTrack = null
   }
 
   /**
@@ -177,24 +231,22 @@ export class RadioStreamService
    * File → ReadStream → FIFO pipe → FFmpeg → Icecast
    */
   streamTrack(track: TrackMeta): void {
-    // this.stopCurrent();
-
-    const filePath = path.resolve(track.filePath);
+    const filePath = path.resolve(track.filePath)
 
     if (!fs.existsSync(filePath)) {
-      this.logger.error(`File not found: ${filePath}`);
-      return;
+      this.logger.error(`File not found: ${filePath}`)
+      return
     }
 
-    this.currentTrack = track;
+    this.currentTrack = track
 
-    this.logger.log(`▶ Streaming: ${track.title}`);
+    this.logger.log(`▶ Streaming: ${track.title}`)
 
     // START EVENT
-    this.emit(WS_EVENTS.TRACK_START, track);
+    this.emit(WS_EVENTS.TRACK_START, track)
 
     // Stream into PIPE (no ffmpeg restart)
-    const stream = fs.createReadStream(filePath, {
+    this.activeReadStream = fs.createReadStream(filePath, {
       /**
        * Size of each chunk read from the file (in bytes)
        * 64 * 1024 = 64KB per chunk
@@ -204,24 +256,26 @@ export class RadioStreamService
        * 64KB is a good balanced default for streaming (especially audio/video pipelines)
        */
       highWaterMark: 64 * 1024,
-    });
+    })
 
-    stream.on('error', (err) => {
+    this.activeReadStream.on('error', (err) => {
       // File/stream read failed
-      this.logger.error(`Stream error: ${err.message}`);
-    });
+      this.logger.error(`Stream error: ${err.message}`)
+    })
 
-    stream.on('end', () => {
-      this.logger.log(`✓ Finished: ${track.title}`);
+    this.activeReadStream.on('end', () => {
+      this.logger.log(`✓ Finished: ${track.title}`)
 
       // Notify listeners that track ended
-      this.emit(WS_EVENTS.TRACK_ENDED, track);
+      this.emit(WS_EVENTS.TRACK_ENDED, track)
+
+      this.activeReadStream = null
 
       // Reset current track state
-      this.currentTrack = null;
-    });
+      this.currentTrack = null
+    })
 
     // Pipe audio into FFmpeg without closing stream (keeps radio running)
-    stream.pipe(this.pipeStream!, { end: false });
+    this.activeReadStream.pipe(this.pipeStream!, { end: false })
   }
 }

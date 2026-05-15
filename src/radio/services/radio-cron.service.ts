@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PlaylistBuilderService } from './playlist-builder.service';
+import { RadioTrackBuilderService } from './radio-track-builder.service';
 // import { PlaylistService } from './playlist.service';
-import { BuildStrategy } from '../playlist.types';
+import { BuildStrategy } from '../radio.types';
 
 @Injectable()
-export class PlaylistCronService {
-  private readonly logger = new Logger(PlaylistCronService.name);
+export class RadioCronService {
+  private readonly logger = new Logger(RadioCronService.name);
 
   constructor(
-    private readonly builder: PlaylistBuilderService,
+    private readonly builder: RadioTrackBuilderService,
     // private readonly playlist: PlaylistService,
   ) {}
 

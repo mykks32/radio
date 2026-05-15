@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { TrackMeta } from '../playlist.types';
+import { Injectable } from '@nestjs/common'
+import { TrackMeta } from '../radio.types'
 
 // Static track library
 const TRACKS: TrackMeta[] = [
@@ -7,94 +7,103 @@ const TRACKS: TrackMeta[] = [
     id: '1',
     title: 'Gairi Khet',
     artist: 'Asha Bhogle',
-    filePath: '/app/audio/song.mp3',
+    filePath:
+      '/Users/rock/Desktop/Company/friendslikeus-core-api/audio/song.mp3',
+    // filePath: '/app/audio/song.mp3',
   },
   {
     id: '2',
     title: 'Siri ma Siri',
     artist: 'Milan Amatya',
-    filePath: '/app/audio/song2.mp3',
+    filePath:
+      '/Users/rock/Desktop/Company/friendslikeus-core-api/audio/song2.mp3',
+    // filePath: '/app/audio/song2.mp3',
   },
   {
     id: '3',
     title: 'Bahut Jatate ho',
     artist: 'Alka Yagnik',
-    filePath: '/app/audio/song3.mp3',
+    filePath:
+      '/Users/rock/Desktop/Company/friendslikeus-core-api/audio/song3.mp3',
+    // filePath: '/app/audio/song3.mp3',
   },
   // {
   //   id: '4',
   //   title: 'Nostalgic Acoustic',
   //   artist: 'Sonican',
+  //   // filePath: '/Users/rock/Desktop/radio/audio/song4.mp3',
   //   filePath: '/app/audio/song4.mp3',
   // },
   // {
   //   id: '5',
   //   title: 'Epic Glory',
   //   artist: 'Sonican',
+  //   // filePath: '/Users/rock/Desktop/radio/audio/song5.mp3',
   //   filePath: '/app/audio/song5.mp3',
   // },
   // {
   //   id: '6',
   //   title: 'Uplifting FellGood',
   //   artist: 'Sonican',
+  //   // filePath: '/Users/rock/Desktop/radio/audio/song6.mp3',
   //   filePath: '/app/audio/song6.mp3',
   // },
-];
+]
 
 const PLAY_COUNTS: Record<string, number> = {
   '1': 980,
   '2': 870,
   '3': 760,
-};
+}
 
 const GENRES: Record<string, string> = {
   '1': 'pop',
   '2': 'alt-pop',
   '3': 'r&b',
-};
+}
 
 // GLOBAL LIMIT
-const DEFAULT_LIMIT = 2;
+const DEFAULT_LIMIT = 2
 
 // Helpers
 function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
+  const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
   }
-  return a;
+  return a
 }
 
 @Injectable()
 export class MusicRepository {
   // Random shuffled tracks (limited to 2)
   findWeightedShuffle(limit: number = DEFAULT_LIMIT): TrackMeta[] {
-    return shuffle(TRACKS).slice(0, limit);
+    return shuffle(TRACKS).slice(0, limit)
   }
 
   // Top played tracks (limited to 2)
   findTopPlayed(limit: number = DEFAULT_LIMIT): TrackMeta[] {
     return [...TRACKS]
       .sort((a, b) => (PLAY_COUNTS[b.id] ?? 0) - (PLAY_COUNTS[a.id] ?? 0))
-      .slice(0, limit);
+      .slice(0, limit)
   }
 
   // Filter by genre (ALWAYS returns max 2)
   findByGenre(genre: string): TrackMeta[] {
     return TRACKS.filter(
       (t) => GENRES[t.id]?.toLowerCase() === genre.toLowerCase(),
-    ).slice(0, DEFAULT_LIMIT);
+    ).slice(0, DEFAULT_LIMIT)
   }
 
   // Active tracks (always max 2)
   findAllActive(): TrackMeta[] {
-    return TRACKS.slice(0, DEFAULT_LIMIT);
+    return TRACKS.slice(0, DEFAULT_LIMIT)
   }
 
   // Fetch by IDs (still limited to 2)
   findByIds(ids: string[]): TrackMeta[] {
-    const set = new Set(ids);
-    return TRACKS.filter((t) => set.has(t.id)).slice(0, DEFAULT_LIMIT);
+    const set = new Set(ids)
+    return TRACKS.filter((t) => set.has(t.id)).slice(0, DEFAULT_LIMIT)
   }
 }
