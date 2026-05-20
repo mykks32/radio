@@ -3,58 +3,123 @@ name: radio
 services:
 
   # Radio application
-  #  radio:
-  #    build:
-  #      context: ..
-  #      dockerfile: docker/Dockerfile
-  #    container_name: radio
-  #    ports:
-  #      - "3000:3000"
-  #    env_file:
-  #      - ../.env
-  #    restart: unless-stopped
-  #    depends_on:
-  #      - kafka
-  #      - redis
-  #      - icecast
-  #    restart: unless-stopped
+  # radio:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile
+  #   container_name: radio
+  #   ports:
+  #     - "3000:3000"
+  #   env_file:
+  #     - ../.env
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #     - icecast
+  #   restart: unless-stopped
 
   # Redis
   redis:
     image: redis:7.2-alpine
     container_name: redis
+
     ports:
       - "6379:6379"
+
     command: redis-server --appendonly yes
+
     volumes:
       - redis-data:/data
+
     restart: unless-stopped
 
   # Redis Insight
   redis-insight:
     image: redis/redisinsight:latest
     container_name: redis-insight
+
     ports:
       - "5540:5540"
+
     volumes:
       - redis-insight-data:/data
+
     depends_on:
       - redis
+
     restart: unless-stopped
 
   # Icecast
   icecast:
     image: moul/icecast
     container_name: icecast
+
     ports:
       - "8000:8000"
+
     environment:
       ICECAST_SOURCE_PASSWORD: hackme
       ICECAST_ADMIN_PASSWORD: admin
       ICECAST_PASSWORD: hackme
       ICECAST_RELAY_PASSWORD: hackme
+
+    restart: unless-stopped
+
+  # Kafka
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+      - "9093:9093"
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "SASL_PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "SASL_PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "SASL_PLAINTEXT:SASL_PLAINTEXT,EXTERNAL:SASL_PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "SASL_PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_SASL_ENABLED_MECHANISMS: "PLAIN"
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: "PLAIN"
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/kafka_jaas.conf"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - ./kafka_jaas.conf:/etc/kafka/kafka_jaas.conf:ro
+
+    restart: unless-stopped
+
+  # Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SASL_PLAINTEXT
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: PLAIN
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: >
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="admin"
+        password="password";
+    depends_on:
+      - kafka
+
     restart: unless-stopped
 
 volumes:
   redis-data:
   redis-insight-data:
+  kafka-data:
