@@ -1,5 +1,9 @@
 name: radio
 
+networks:
+  radio-net:
+    driver: bridge
+
 services:
 
   # Radio application
@@ -8,69 +12,70 @@ services:
   #     context: ..
   #     dockerfile: docker/Dockerfile
   #   container_name: radio
+  #   networks:
+  #     - radio-net
   #   ports:
   #     - "3000:3000"
   #   env_file:
   #     - ../.env
   #   depends_on:
-  #     - kafka
-  #     - redis
-  #     - icecast
+  #     kafka:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_started
+  #     icecast:
+  #       condition: service_started
   #   restart: unless-stopped
 
   # Redis
   redis:
     image: redis:7.2-alpine
     container_name: redis
-
+    networks:
+      - radio-net
     ports:
       - "6379:6379"
-
     command: redis-server --appendonly yes
-
     volumes:
       - redis-data:/data
-
     restart: unless-stopped
 
   # Redis Insight
   redis-insight:
     image: redis/redisinsight:latest
     container_name: redis-insight
-
+    networks:
+      - radio-net
     ports:
       - "5540:5540"
-
     volumes:
       - redis-insight-data:/data
-
     depends_on:
       - redis
-
     restart: unless-stopped
 
   # Icecast
   icecast:
     image: moul/icecast
     container_name: icecast
-
+    networks:
+      - radio-net
     ports:
       - "8000:8000"
-
     environment:
       ICECAST_SOURCE_PASSWORD: hackme
       ICECAST_ADMIN_PASSWORD: admin
       ICECAST_PASSWORD: hackme
       ICECAST_RELAY_PASSWORD: hackme
-
     restart: unless-stopped
 
   # Kafka
-
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka
     hostname: kafka
+    networks:
+      - radio-net
     ports:
       - "9092:9092"
       - "29092:29092"
@@ -92,17 +97,24 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092", "--command-config", "/etc/kafka/client.properties"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     volumes:
       - kafka-data:/var/lib/kafka/data
       - ./kafka_jaas.conf:/etc/kafka/kafka_jaas.conf:ro
-
+      - ./client.properties:/etc/kafka/client.properties:ro
     restart: unless-stopped
 
   # Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
+    networks:
+      - radio-net
     ports:
       - "8080:8080"
     environment:
@@ -110,13 +122,10 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SASL_PLAINTEXT
       KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: PLAIN
-      KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: >
-        org.apache.kafka.common.security.plain.PlainLoginModule required
-        username="admin"
-        password="password";
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: 'org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="password";'
     depends_on:
-      - kafka
-
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
