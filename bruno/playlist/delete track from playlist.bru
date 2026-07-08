@@ -1,0 +1,27 @@
+meta {
+  name: delete track from playlist
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{radioUrl}}/playlist/next
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "trackIds": [
+      "1",
+      "2"
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

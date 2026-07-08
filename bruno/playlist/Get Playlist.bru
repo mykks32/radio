@@ -1,0 +1,18 @@
+meta {
+  name: Get Playlist
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{radioUrl}}/playlist
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

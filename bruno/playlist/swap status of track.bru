@@ -1,0 +1,18 @@
+meta {
+  name: swap status of track
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{radioUrl}}/playlist/swap
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

@@ -1,0 +1,26 @@
+meta {
+  name: add track to Playlist
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{radioUrl}}/playlist/tracks
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "trackIds": [
+      "1"
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

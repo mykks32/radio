@@ -1,0 +1,18 @@
+meta {
+  name: Radio Stop
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{radioUrl}}/radio/stop
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

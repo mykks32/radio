@@ -1,0 +1,18 @@
+meta {
+  name: Radio Start
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{radioUrl}}/radio/start
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}
